@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+    <meta charset="UTF-8">
+    <title>Furnace Charging System</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f7f6; padding: 20px; }
+        .container { max-width: 1150px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin: auto; overflow-x: auto; }
+        h2, h3 { color: #333; text-align: center; }
+        label { font-weight: bold; display: block; margin-top: 10px; }
+        input, select, button { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background: #28a745; color: white; font-size: 16px; border: none; cursor: pointer; margin-top: 15px; }
+        button:hover { background: #218838; }
+        .login-box { background: #e2e8f0; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .filter-box { background: #e9ecef; padding: 10px; border-radius: 5px; margin-top: 20px; }
+        table { width: 100%; margin-top: 15px; border-collapse: collapse; font-size: 13px; }
+        th, td { border: 1px solid #ddd; padding: 8px 4px; text-align: center; }
+        th { background: #f2f2f2; font-size: 12px; }
+        .total-box { margin-top: 10px; font-weight: bold; color: #007bff; text-align: right; }
+        .logout-btn { background: #dc3545; width: auto; padding: 5px 10px; font-size: 14px; float: right; margin-top: 0; }
+        .material-row { display: flex; gap: 10px; margin-top: 5px; align-items: center; }
+        .material-row select, .material-row input { margin-top: 0; }
+        .remove-btn { background: #dc3545; width: auto; padding: 10px; margin-top: 0; }
+        .add-row-btn { background: #007bff; width: auto; padding: 8px 15px; font-size: 14px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🔥 Furnace Charging Entry System</h2>
+    
+    <!-- ऑपरेटर लॉगइन सेक्शन -->
+    <div class="login-box" id="loginSection">
+        <h3>👤 ऑपरेटर लॉगइन</h3>
+        <label>तुमचे नाव प्रविष्ट करा:</label>
+        <input type="text" id="operatorInput" placeholder="ऑपरेटरचे नाव टाका">
+        <button type="button" onclick="loginOperator()">लॉगइन करा (Start)</button>
+    </div>
+
+    <!-- मुख्य फॉर्म -->
+    <div id="formSection" style="display: none;">
+        <div style="background: #d4edda; padding: 10px; border-radius: 4px; margin-bottom: 15px; overflow: hidden;">
+            सक्रिय ऑपरेटर (Active Operator): <strong id="displayOperator"></strong> 
+            <button type="button" class="logout-btn" onclick="logoutOperator()">लॉग आउट / बदला (Logout)</button>
+        </div>
+
+        <form id="furnaceForm">
+            <label>Heat No (हिट नंबर - ऑटमॅटिक):</label>
+            <input type="text" id="heatNo" readonly style="background: #e9ecef; font-weight: bold;">
+
+            <label style="margin-top: 15px;">Materials & Weight (मटेरियल्स आणि वजन जोडा):</label>
+            <div id="materialRowsContainer">
+                <div class="material-row">
+                    <select class="materialSelect" onchange="updateMaterialDropdowns()" required>
+                        <option value="">-- मटेरियल निवडा --</option>
+                        <option value="MS">MS</option>
+                        <option value="CRC">CRC</option>
+                        <option value="CI">CI</option>
+                        <option value="PIG">PIG</option>
+                        <option value="SG BOARING">SG BOARING</option>
+                        <option value="CI BOARING">CI BOARING</option>
+                        <option value="SOLED">SOLED</option>
+                        <option value="R.R">R.R</option>
+                    </select>
+                    <input type="number" class="weightInput" placeholder="वजन (Kg/Ton)" step="0.01" required>
+                    <button type="button" class="remove-btn" onclick="removeRow(this)" style="display:none;">X</button>
+                </div>
+            </div>
+
+            <button type="button" class="add-row-btn" onclick="addMaterialRow()">+ आणखी मटेरियल जोडा (Same Heat)</button>
+            <br>
+            <button type="submit">Save Heat Entry (हीट सेव्ह करा)</button>
+        </form>
+    </div>
+
+    <div class="filter-box">
+        <h3>📅 Month-wise Report / Filter (महिनानुसार रिपोर्ट पाहा)</h3>
+        <label>महिना निवडा:</label>
+        <select id="monthFilter" onchange="filterRecords()">
+            <option value="all">सर्व रेकॉर्ड (All Records)</option>
+            <option value="2026-01">जानेवारी 2026</option>
+            <option value="2026-02">फेब्रुवारी 2026</option>
+            <option value="2026-03">मार्च 2026</option>
+            <option value="2026-04">एप्रिल 2026</option>
+            <option value="2026-05">मे 2026</option>
+            <option value="2026-06">जून 2026</option>
+            <option value="2026-07">जुलै 2026</option>
+            <option value="2026-08">ऑगस्ट 2026</option>
+            <option value="2026-09">सप्टेंबर 2026</option>
+            <option value="2026-10">ऑक्टोबर 2026</option>
+            <option value="2026-11">नोव्हेंबर 2026</option>
+            <option value="2026-12">डिसेंबर 2026</option>
+        </select>
+    </div>
+
+    <h3 style="margin-top: 30px;">Saved Records / Report</h3>
+    <table id="recordsTable">
+        <thead>
+            <tr>
+                <th>Date (तारीख)</th>
+                <th>Time (वेळ)</th>
+                <th>Heat No</th>
+                <th>Operator</th>
+                <th>MS</th>
+                <th>CRC</th>
+                <th>CI</th>
+                <th>PIG</th>
+                <th>SG BOARING</th>
+                <th>CI BOARING</th>
+                <th>SOLED</th>
+                <th>R.R</th>
+                <th>Total Weight</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- डेटा येथे दिसेल -->
+        </tbody>
+    </table>
+    <div class="total-box" id="totalWeight">एकूण वजन: 0</div>
+</div>
+
+<script>
+    const loginSection = document.getElementById('loginSection');
+    const formSection = document.getElementById('formSection');
+    const displayOperator = document.getElementById('displayOperator');
+    const operatorInput = document.getElementById('operatorInput');
+    const heatNoInput = document.getElementById('heatNo');
+    const materialRowsContainer = document.getElementById('materialRowsContainer');
+    
+    const form = document.getElementById('furnaceForm');
+    const tableBody = document.querySelector('#recordsTable tbody');
+    const monthFilter = document.getElementById('monthFilter');
+    const totalWeightDiv = document.getElementById('totalWeight');
+
+    const allMaterials = ["MS", "CRC", "CI", "PIG", "SG BOARING", "CI BOARING", "SOLED", "R.R"];
+
+    window.onload = function() {
+        const savedOperator = localStorage.getItem('currentOperator');
+        if (savedOperator) {
+            loginSection.style.display = 'none';
+            formSection.style.display = 'block';
+            displayOperator.innerText = savedOperator;
+            setNextHeatNo();
+        }
+
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        monthFilter.value = `${year}-${month}`;
+        loadRecords();
+    };
+
+    function loginOperator() {
+        const name = operatorInput.value.trim();
+        if (name === "") {
+            alert("कृपया ऑपरेटरचे नाव प्रविष्ट करा!");
+            return;
+        }
+        localStorage.setItem('currentOperator', name);
+        loginSection.style.display = 'none';
+        formSection.style.display = 'block';
+        displayOperator.innerText = name;
+        setNextHeatNo();
+    }
+
+    function logoutOperator() {
+        localStorage.removeItem('currentOperator');
+        formSection.style.display = 'none';
+        loginSection.style.display = 'block';
+        operatorInput.value = '';
+    }
+
+    function setNextHeatNo() {
+        let records = JSON.parse(localStorage.getItem('furnaceRecords')) || [];
+        if (records.length === 0) {
+            heatNoInput.value = "1";
+        } else {
+            let lastRecord = records[records.length - 1];
+            let nextHeat = parseInt(lastRecord.heatNo) + 1;
+            heatNoInput.value = nextHeat;
+        }
+    }
+
+    function addMaterialRow() {
+        const row = document.createElement('div');
+        row.className = 'material-row';
+        row.innerHTML = `
+            <select class="materialSelect" onchange="updateMaterialDropdowns()" required>
+                <option value="">-- मटेरियल निवडा --</option>
+            </select>
+            <input type="number" class="weightInput" placeholder="वजन (Kg/Ton)" step="0.01" required>
+            <button type="button" class="remove-btn" onclick="removeRow(this)">X</button>
+        `;
+        materialRowsContainer.appendChild(row);
+        updateMaterialDropdowns();
+        toggleRemoveButtons();
+    }
+
+    function removeRow(btn) {
+        btn.parentElement.remove();
+        updateMaterialDropdowns();
+        toggleRemoveButtons();
+    }
+
+    function updateMaterialDropdowns() {
+        const rows = materialRowsContainer.querySelectorAll('.material-row');
+        let selectedValues = [];
+
+        rows.forEach(row => {
+            const val = row.querySelector('.materialSelect').value;
+            if (val) selectedValues.push(val);
+        });
+
+        rows.forEach(row => {
+            const select = row.querySelector('.materialSelect');
+            const currentVal = select.value;
+
+            let optionsHtml = `<option value="">-- मटेरियल निवडा --</option>`;
+            allMaterials.forEach(mat => {
+                if (mat === currentVal || !selectedValues.includes(mat)) {
+                    optionsHtml += `<option value="${mat}" ${mat === currentVal ? 'selected' : ''}>${mat}</option>`;
+                }
+            });
+            select.innerHTML = optionsHtml;
+        });
+    }
+
+    function toggleRemoveButtons() {
+        const rows = materialRowsContainer.querySelectorAll('.material-row');
+        rows.forEach((row) => {
+            const removeBtn = row.querySelector('.remove-btn');
+            if (rows.length === 1) {
+                removeBtn.style.display = 'none';
+            } else {
+                removeBtn.style.display = 'inline-block';
+            }
+        });
+    }
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const operatorName = localStorage.getItem('currentOperator');
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        
+        const dateStr = `${year}-${month}-${day}`;
+        const timeStr = `${hours}:${minutes}:${seconds}`;
+        const monthKey = `${year}-${month}`;
+
+        const materialRows = materialRowsContainer.querySelectorAll('.material-row');
+        let materialWeights = {};
+        let heatTotalWeight = 0;
+
+        materialRows.forEach(row => {
+            const mat = row.querySelector('.materialSelect').value;
+            const wt = parseFloat(row.querySelector('.weightInput').value) || 0;
+            materialWeights[mat] = (materialWeights[mat] || 0) + wt;
+            heatTotalWeight += wt;
+        });
+
+        const record = {
+            date: dateStr,
+            time: timeStr,
+            monthKey: monthKey,
+            heatNo: heatNoInput.value,
+            operator: operatorName,
+            materialWeights: materialWeights,
+            totalWeight: heatTotalWeight
+        };
+
+        let records = JSON.parse(localStorage.getItem('furnaceRecords')) || [];
+        records.push(record);
+        localStorage.setItem('furnaceRecords', JSON.stringify(records));
+
+        loadRecords();
+        setNextHeatNo();
+        
+        materialRowsContainer.innerHTML = `
+            <div class="material-row">
+                <select class="materialSelect" onchange="updateMaterialDropdowns()" required>
+                    <option value="">-- मटेरियल निवडा --</option>
+                    <option value="MS">MS</option>
+                    <option value="CRC">CRC</option>
+                    <option value="CI">CI</option>
+                    <option value="PIG">PIG</option>
+                    <option value="SG BOARING">SG BOARING</option>
+                    <option value="CI BOARING">CI BOARING</option>
+                    <option value="SOLED">SOLED</option>
+                    <option value="R.R">R.R</option>
+                </select>
+                <input type="number" class="weightInput" placeholder="वजन (Kg/Ton)" step="0.01" required>
+                <button type="button" class="remove-btn" onclick="removeRow(this)" style="display:none;">X</button>
+            </div>
+        `;
+        
+        alert('हीट यशस्वीरित्या सेव्ह झाली!');
+    });
+
+    function loadRecords() {
+        let records = JSON.parse(localStorage.getItem('furnaceRecords')) || [];
+        const selectedMonth = monthFilter.value;
+        
+        tableBody.innerHTML = '';
+        let grandTotalW = 0;
+
+        records.forEach(r => {
+            // जुन्या डेटासाठी बॅकअप मॅपिंग
+            if (!r.date && r.time) {
+                let parts = r.time.split(' ');
+                r.date = parts[0] || "";
+                r.time = parts[1] || "";
+            }
+            if(!r.monthKey && r.date) {
+                r.monthKey = r.date.substring(0, 7); 
+            }
+
+            if(selectedMonth === 'all' || r.monthKey === selectedMonth) {
+                const row = document.createElement('tr');
+                
+                let mw = r.materialWeights || {};
+                let rowTotal = r.totalWeight || 0;
+
+                if (!r.materialWeights && r.items) {
+                    mw = {};
+                    r.items.forEach(i => { mw[i.material] = i.weight; });
+                }
+
+                let htmlContent = `
+                    <td>${r.date || ""}</td>
+                    <td>${r.time || ""}</td>
+                    <td><b>${r.heatNo}</b></td>
+                    <td>${r.operator}</td>
+                `;
+
+                allMaterials.forEach(matName => {
+                    let wVal = mw[matName] ? mw[matName] : "";
+                    htmlContent += `<td>${wVal}</td>`;
+                });
+
+                htmlContent += `<td><b>${rowTotal.toFixed(2)}</b></td>`;
+                row.innerHTML = htmlContent;
+                tableBody.appendChild(row);
+                grandTotalW += rowTotal;
+            }
+        });
+
+        totalWeightDiv.innerHTML = `एकूण वजन (Grand Total): ${grandTotalW.toFixed(2)}`;
+    }
+
+    function filterRecords() {
+        loadRecords();
+    }
+</script>
+
+</body>
+</html>

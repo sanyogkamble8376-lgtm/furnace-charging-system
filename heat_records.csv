@@ -1,0 +1,31 @@
+Heat No,Operator,Material,Weight,Date,Time
+2,sanyog kamblke,SOLID,20.0,,
+1,pratik jadhav,MS,20.0,2026-10-04,10:26:03
+1,pratik jadhav,MS,0.002,2026-10-04,10:42:18
+1,sanket patil,MS,20.0,2026-10-04,10:43:51
+1,sanket patil,MS,20.0,2026-10-04,10:55:38
+1,sanket patil,CRC,40.0,2026-10-04,10:55:38
+1,sanket patil,CI,30.0,2026-10-04,10:55:38
+1,sanket patil,PIG,50.0,2026-10-04,10:55:38
+1,sanket patil,S.G BORING,35.0,2026-10-04,10:55:38
+1,sanket patil,C.I BORING,40.0,2026-10-04,10:55:38
+1,sanket patil,SOLID,80.0,2026-10-04,10:55:38
+1,sanket patil,R.R,20.0,2026-10-04,10:55:38
+1,santosh jadhav,MS,20.0,2026-10-04,11:01:04
+1,santosh jadhav,CRC,30.0,2026-10-04,11:01:04
+1,santosh jadhav,MS,20.0,2026-10-04,11:01:04
+1,amit patil,MS,30.0,2026-10-04,11:04:12
+1,amit patil,MS,30.0,2026-10-04,11:04:12
+1,amit patil,PIG,30.0,2026-10-04,11:04:12
+1,amit patil,CI BORING,920.0,2026-10-04,11:04:12
+1,k.k patil,MS,30.0,2026-10-04,11:07:52
+1,k.k patil,CI BORING,20.0,2026-10-04,11:07:52
+1,k.k patil,SG BORING,60.0,2026-10-04,11:07:52
+1,k.k patil,MS,30.0,2026-10-04,11:07:52
+2,sahil khader,MS,30.0,2026-10-04,11:12:56
+2,sahil khader,CRC,50.0,2026-10-04,11:12:56
+2,sahil khader,SG BORING,60.0,2026-10-04,11:12:56
+2,sahil khader,PIG,60.0,2026-10-04,11:12:56
+3,sahil khader,CI BORING,30.0,2026-10-04,11:14:16
+3,sahil khader,CI BORING,60.0,2026-10-04,11:14:16
+3,sahil khader,MS,60.0,2026-10-04,11:14:16
