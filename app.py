@@ -22,12 +22,12 @@ def get_current_ist():
 
 # --- EMAIL CONFIGURATION ---
 SENDER_EMAIL = "sanyogkamble55@gmail.com"
-# NOTE: Ith 16-digit Google App Password taka (e.g., "abcd efgh ijkl mnop")
+# NOTE: इथे १६-अक्षरी Google App Password टाका
 SENDER_PASSWORD = "sanyogkamble@0507"
 RECEIVER_EMAIL = "sanyogkamble55@gmail.com"
 
 def _send_email_async(subject, body_text):
-    """Background thread to prevent UI freezing/hanging during email sending"""
+    """Background thread to prevent UI freezing during email send"""
     try:
         clean_pwd = SENDER_PASSWORD.replace(" ", "")
         msg = MIMEMultipart()
@@ -161,4 +161,110 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 if st.button("Save Heat Entry (हिट सेव्ह करा)", type="primary", use_container_width=True):
     if not selected_entries:
-        st.warning("कृपया कमीत कमी एका Material चे
+        st.warning("Please select at least one Material and Weight!")
+    else:
+        now = get_current_ist()
+        date_str = now.strftime("%Y-%m-%d")
+        time_str = now.strftime("%H:%M:%S")
+        
+        new_rows = []
+        for mat, wt in selected_entries:
+            new_rows.append({
+                "Date": date_str,
+                "Time": time_str,
+                "Heat No": int(current_heat_no),
+                "Operator": st.session_state["operator_name"],
+                "Material": mat,
+                "Weight": wt
+            })
+            
+        df_new = pd.DataFrame(new_rows)
+        
+        if os.path.exists(DATA_FILE):
+            df_existing = pd.read_csv(DATA_FILE)
+            if "Date/Time" in df_existing.columns:
+                df_existing = df_existing.drop(columns=["Date/Time"])
+            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+        else:
+            df_combined = df_new
+            
+        df_combined.to_csv(DATA_FILE, index=False)
+        st.session_state["rows_count"] = 1
+        st.success(f"✅ Heat No {int(current_heat_no)} saved successfully!")
+        
+        # Async Notification (Never blocks UI/data saving)
+        subject = f"🚨 New Heat Entry: Heat No {int(current_heat_no)} ({st.session_state['operator_name']})"
+        body = f"New Heat Entry Saved:\n\nDate: {date_str}\nTime: {time_str}\nHeat No: {int(current_heat_no)}\nOperator: {st.session_state['operator_name']}"
+        send_email_notification_async(subject, body)
+        
+        st.rerun()
+
+# --- SIDEBAR CONTROLS ---
+with st.sidebar:
+    st.subheader("📧 Email Controls")
+    st.info("Email notifications run automatically in the background.")
+
+st.markdown("---")
+
+# --- 5. SAVED RECORDS & REPORT ---
+st.subheader("🗓️ Month-wise Saved Report")
+
+if os.path.exists(DATA_FILE):
+    df_all = pd.read_csv(DATA_FILE)
+    
+    if not df_all.empty and "Date" in df_all.columns:
+        df_all["Date_dt"] = pd.to_datetime(df_all["Date"])
+        df_all["Month_Year"] = df_all["Date_dt"].dt.strftime("%B %Y")
+        
+        all_months = df_all["Month_Year"].unique().tolist()
+        
+        col_f1, col_f2 = st.columns([3, 1])
+        with col_f1:
+            selected_month = st.selectbox("महिना निवडा (Select Month):", all_months)
+        
+        df_filtered = df_all[df_all["Month_Year"] == selected_month].copy()
+        
+        if not df_filtered.empty:
+            pivot_df = df_filtered.pivot_table(
+                index=["Date", "Time", "Heat No", "Operator"],
+                columns="Material",
+                values="Weight",
+                aggfunc="sum",
+                fill_value=0
+            ).reset_index()
+            
+            for m in MATERIALS:
+                if m not in pivot_df.columns:
+                    pivot_df[m] = 0.0
+                    
+            pivot_df["Total Weight"] = pivot_df[MATERIALS].sum(axis=1)
+            
+            display_df = pivot_df.copy()
+            for m in MATERIALS:
+                display_df[m] = display_df[m].apply(lambda x: f"{x:.2f}" if float(x) > 0 else "")
+            display_df["Total Weight"] = display_df["Total Weight"].apply(lambda x: f"{x:.2f}")
+            
+            final_cols = ["Date", "Time", "Heat No", "Operator"] + MATERIALS + ["Total Weight"]
+            display_df = display_df[final_cols]
+            
+            st.markdown("<h4 style='text-align: center;'>Saved Records Data Table</h4>", unsafe_allow_html=True)
+            st.dataframe(display_df, use_container_width=True)
+            
+            grand_total = pivot_df["Total Weight"].sum()
+            
+            col_t1, col_t2 = st.columns([2, 2])
+            with col_t1:
+                csv_data = pivot_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download Month Report (CSV)",
+                    data=csv_data,
+                    file_name=f"Furnace_Report_{selected_month.replace(' ', '_')}.csv",
+                    mime="text/csv"
+                )
+            with col_t2:
+                st.markdown(
+                    f"<h4 style='text-align: right; color: #1E88E5;'>Grand Total: {grand_total:.2f}</h4>", 
+                    unsafe_allow_html=True
+                )
+else:
+    st.info("अद्याप कोणतेही रेकॉर्ड सेव्ह केलेले नाही.")
