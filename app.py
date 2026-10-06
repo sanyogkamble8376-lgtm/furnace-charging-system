@@ -21,7 +21,7 @@ def get_current_ist():
 
 # --- EMAIL CONFIGURATION ---
 SENDER_EMAIL = "sanyogkamble55@gmail.com"        # Tumcha Gmail ID
-SENDER_PASSWORD = "sanyogkamble0507"     # Google App Password (16-digit)
+SENDER_PASSWORD = "sanyogkamble@0507"     # NOTE: Normal Password chalnar nahi, 16-digit App Password pahije!
 RECEIVER_EMAIL = "sanyogkamble55@gmail.com"      # Receiver Email ID
 
 def send_email_notification(subject, body_text):
@@ -42,9 +42,8 @@ def send_email_notification(subject, body_text):
             part['Content-Disposition'] = f'attachment; filename="Furnace_Report_{today_str}.csv"'
             msg.attach(part)
 
-        # Timeout 5 sec set kela ahe jyane app hang honar nahi
-        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=5)
-        server.starttls()
+        # Port 465 SSL vaparla aahe jyane Streamlit Cloud var connection close honar nahi
+        server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=10)
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.send_message(msg)
         server.quit()
@@ -205,64 +204,3 @@ with st.sidebar:
 st.markdown("---")
 
 # --- 5. SAVED RECORDS & REPORT ---
-st.subheader("🗓️ Month-wise Saved Report")
-
-if os.path.exists(DATA_FILE):
-    df_all = pd.read_csv(DATA_FILE)
-    
-    if not df_all.empty and "Date" in df_all.columns:
-        df_all["Date_dt"] = pd.to_datetime(df_all["Date"])
-        df_all["Month_Year"] = df_all["Date_dt"].dt.strftime("%B %Y")
-        
-        all_months = df_all["Month_Year"].unique().tolist()
-        
-        col_f1, col_f2 = st.columns([3, 1])
-        with col_f1:
-            selected_month = st.selectbox("महिना निवडा (Select Month):", all_months)
-        
-        df_filtered = df_all[df_all["Month_Year"] == selected_month].copy()
-        
-        if not df_filtered.empty:
-            pivot_df = df_filtered.pivot_table(
-                index=["Date", "Time", "Heat No", "Operator"],
-                columns="Material",
-                values="Weight",
-                aggfunc="sum",
-                fill_value=0
-            ).reset_index()
-            
-            for m in MATERIALS:
-                if m not in pivot_df.columns:
-                    pivot_df[m] = 0.0
-                    
-            pivot_df["Total Weight"] = pivot_df[MATERIALS].sum(axis=1)
-            
-            display_df = pivot_df.copy()
-            for m in MATERIALS:
-                display_df[m] = display_df[m].apply(lambda x: f"{x:.2f}" if x > 0 else "")
-            display_df["Total Weight"] = display_df["Total Weight"].apply(lambda x: f"{x:.2f}")
-            
-            final_cols = ["Date", "Time", "Heat No", "Operator"] + MATERIALS + ["Total Weight"]
-            display_df = display_df[final_cols]
-            
-            st.markdown("<h4 style='text-align: center;'>Saved Records Data Table</h4>", unsafe_allow_html=True)
-            st.dataframe(display_df, use_container_width=True)
-            
-            grand_total = pivot_df["Total Weight"].sum()
-            
-            col_t1, col_t2 = st.columns([2, 2])
-            with col_t1:
-                csv_data = pivot_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download Month Report (CSV)",
-                    data=csv_data,
-                    file_name=f"Furnace_Report_{selected_month.replace(' ', '_')}.csv",
-                    mime="text/csv"
-                )
-            with col_t2:
-                st.markdown(
-                    f"<h4 style='text-align: right; color: #1E88E5;'>Grand Total: {grand_total:.2f}</h4>", 
-                    unsafe_allow_html=True
-                )
-else:
-    st.info("अद्याप कोणतेही रेकॉर्ड सेव्ह केलेले नाही.")
