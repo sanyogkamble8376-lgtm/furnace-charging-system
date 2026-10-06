@@ -20,9 +20,9 @@ def get_current_ist():
     return datetime.now(IST)
 
 # --- EMAIL CONFIGURATION ---
-SENDER_EMAIL = "your_email@gmail.com"        # Tumcha Gmail ID
-SENDER_PASSWORD = "xxxx xxxx xxxx xxxx"     # Google App Password (16-digit)
-RECEIVER_EMAIL = "your_email@gmail.com"      # Receiver Email ID
+SENDER_EMAIL = "sanyogkamble55@gmail.com"        # Tumcha Gmail ID
+SENDER_PASSWORD = "sanyogkamble0507"     # Google App Password (16-digit)
+RECEIVER_EMAIL = "sanyogkamble55@gmail.com"      # Receiver Email ID
 
 def send_email_notification(subject, body_text):
     if SENDER_EMAIL == "your_email@gmail.com" or "xxxx" in SENDER_PASSWORD:
