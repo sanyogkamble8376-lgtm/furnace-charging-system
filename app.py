@@ -4,6 +4,7 @@ from datetime import datetime
 import pytz
 import os
 import smtplib
+import threading
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -20,14 +21,15 @@ def get_current_ist():
     return datetime.now(IST)
 
 # --- EMAIL CONFIGURATION ---
-SENDER_EMAIL = "sanyogkamble55@gmail.com"        # Tumcha Gmail ID
-SENDER_PASSWORD = "sanyogkamble@0507"     # NOTE: Normal Password chalnar nahi, 16-digit App Password pahije!
-RECEIVER_EMAIL = "sanyogkamble55@gmail.com"      # Receiver Email ID
+SENDER_EMAIL = "sanyogkamble55@gmail.com"
+# NOTE: Ith 16-digit Google App Password taka (e.g., "abcd efgh ijkl mnop")
+SENDER_PASSWORD = "sanyogkamble@0507"
+RECEIVER_EMAIL = "sanyogkamble55@gmail.com"
 
-def send_email_notification(subject, body_text):
-    if SENDER_EMAIL == "your_email@gmail.com" or "xxxx" in SENDER_PASSWORD:
-        return False, "Email Credentials Not Configured"
+def _send_email_async(subject, body_text):
+    """Background thread to prevent UI freezing/hanging during email sending"""
     try:
+        clean_pwd = SENDER_PASSWORD.replace(" ", "")
         msg = MIMEMultipart()
         msg['From'] = SENDER_EMAIL
         msg['To'] = RECEIVER_EMAIL
@@ -42,14 +44,20 @@ def send_email_notification(subject, body_text):
             part['Content-Disposition'] = f'attachment; filename="Furnace_Report_{today_str}.csv"'
             msg.attach(part)
 
-        # Port 465 SSL vaparla aahe jyane Streamlit Cloud var connection close honar nahi
-        server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=10)
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        # Port 465 SSL connection
+        server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=5)
+        server.login(SENDER_EMAIL, clean_pwd)
         server.send_message(msg)
         server.quit()
-        return True, "Email Sent Successfully"
+        print("Email Sent Successfully")
     except Exception as e:
-        return False, str(e)
+        print(f"Background Email Exception: {e}")
+
+def send_email_notification_async(subject, body_text):
+    """Triggers background thread so save operation never gets blocked"""
+    thread = threading.Thread(target=_send_email_async, args=(subject, body_text))
+    thread.daemon = True
+    thread.start()
 
 # --- 1. SESSION MANAGEMENT ---
 if "operator_name" not in st.session_state:
@@ -153,54 +161,4 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 if st.button("Save Heat Entry (हिट सेव्ह करा)", type="primary", use_container_width=True):
     if not selected_entries:
-        st.warning("कृपया कमीत कमी एका Material चे नाव आणि Weight भरा!")
-    else:
-        now = get_current_ist()
-        date_str = now.strftime("%Y-%m-%d")
-        time_str = now.strftime("%H:%M:%S")
-        
-        new_rows = []
-        for mat, wt in selected_entries:
-            new_rows.append({
-                "Date": date_str,
-                "Time": time_str,
-                "Heat No": int(current_heat_no),
-                "Operator": st.session_state["operator_name"],
-                "Material": mat,
-                "Weight": wt
-            })
-            
-        df_new = pd.DataFrame(new_rows)
-        
-        if os.path.exists(DATA_FILE):
-            df_existing = pd.read_csv(DATA_FILE)
-            if "Date/Time" in df_existing.columns:
-                df_existing = df_existing.drop(columns=["Date/Time"])
-            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-        else:
-            df_combined = df_new
-            
-        df_combined.to_csv(DATA_FILE, index=False)
-        st.session_state["rows_count"] = 1
-        st.success(f"✅ Heat No {int(current_heat_no)} ची माहिती सेव्ह झाली (IST Time: {time_str})!")
-        
-        # Immediate Notification (Safe Email Trigger)
-        subject = f"🚨 New Heat Entry: Heat No {int(current_heat_no)} ({st.session_state['operator_name']})"
-        body = f"New Heat Entry Saved:\n\nDate: {date_str}\nTime: {time_str}\nHeat No: {int(current_heat_no)}\nOperator: {st.session_state['operator_name']}"
-        send_email_notification(subject, body)
-        
-        st.rerun()
-
-# --- SIDEBAR EMAIL CONTROLS ---
-with st.sidebar:
-    st.subheader("📧 Email Controls")
-    if st.button("Send Test Email Now"):
-        status, msg = send_email_notification("🧪 Test Email - Furnace System", "This is a test email notification.")
-        if status:
-            st.success("✅ Email Sent!")
-        else:
-            st.error(f"❌ Failed: {msg}")
-
-st.markdown("---")
-
-# --- 5. SAVED RECORDS & REPORT ---
+        st.warning("कृपया कमीत कमी एका Material चे
