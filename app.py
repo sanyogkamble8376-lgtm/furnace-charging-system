@@ -21,10 +21,10 @@ def get_current_ist():
     return datetime.now(IST)
 
 # --- EMAIL CONFIGURATION ---
-SENDER_EMAIL = "sanyogkamble155@gmail.com"
+SENDER_EMAIL = "swapnilchougule155@gmail.com"
 # NOTE: Ithe tumcha 16-character Google App Password vapara
-SENDER_PASSWORD = "Sanyogkamble@0507"
-RECEIVER_EMAIL = "sanyogkamble155@gmail.com"
+SENDER_PASSWORD = "ddyk iyhr iihr poon"
+RECEIVER_EMAIL = "swapnilchougule155@gmail.com"
 
 def _send_email_async(subject, body_text, file_to_attach=None, filename=None):
     """Background thread to prevent UI freezing during email send"""
@@ -49,12 +49,13 @@ def _send_email_async(subject, body_text, file_to_attach=None, filename=None):
             part['Content-Disposition'] = f'attachment; filename="Furnace_Report_{today_str}.csv"'
             msg.attach(part)
 
-        # Port 465 SSL connection
-        server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=10)
-        server.login(SENDER_EMAIL, clean_pwd)
-        server.send_message(msg)
-        server.quit()
-        print("Email Sent Successfully")
+        # Port 587 TLS Connection (Fixes WinError 10013)
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as server:
+            server.starttls()
+            server.login(SENDER_EMAIL, clean_pwd)
+            server.send_message(msg)
+            
+        print("Email Sent Successfully!")
     except Exception as e:
         print(f"Background Email Exception: {e}")
 
