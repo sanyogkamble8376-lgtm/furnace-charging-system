@@ -21,10 +21,10 @@ def get_current_ist():
     return datetime.now(IST)
 
 # --- EMAIL CONFIGURATION ---
-SENDER_EMAIL = "sanyogkamble55@gmail.com"
+SENDER_EMAIL = "sanyogkamble155@gmail.com"
 # NOTE: Ithe tumcha 16-character Google App Password vapara
 SENDER_PASSWORD = "sanyogkamble@0507"
-RECEIVER_EMAIL = "sanyogkamble55@gmail.com"
+RECEIVER_EMAIL = "sanyogkamble155@gmail.com"
 
 def _send_email_async(subject, body_text, file_to_attach=None, filename=None):
     """Background thread to prevent UI freezing during email send"""
