@@ -22,11 +22,11 @@ def get_current_ist():
 
 # --- EMAIL CONFIGURATION ---
 SENDER_EMAIL = "sanyogkamble55@gmail.com"
-# NOTE: इथे १६-अक्षरी Google App Password टाका
+# NOTE: Ithe tumcha 16-character Google App Password vapara
 SENDER_PASSWORD = "sanyogkamble@0507"
 RECEIVER_EMAIL = "sanyogkamble55@gmail.com"
 
-def _send_email_async(subject, body_text):
+def _send_email_async(subject, body_text, file_to_attach=None, filename=None):
     """Background thread to prevent UI freezing during email send"""
     try:
         clean_pwd = SENDER_PASSWORD.replace(" ", "")
@@ -36,7 +36,12 @@ def _send_email_async(subject, body_text):
         msg['Subject'] = subject
         msg.attach(MIMEText(body_text, 'plain'))
 
-        if os.path.exists(DATA_FILE):
+        # Standard auto-attach full CSV or specific month CSV
+        if file_to_attach is not None and filename is not None:
+            part = MIMEApplication(file_to_attach, Name=filename)
+            part['Content-Disposition'] = f'attachment; filename="{filename}"'
+            msg.attach(part)
+        elif os.path.exists(DATA_FILE):
             df = pd.read_csv(DATA_FILE)
             today_str = get_current_ist().strftime("%Y-%m-%d")
             csv_bytes = df.to_csv(index=False).encode('utf-8')
@@ -45,7 +50,7 @@ def _send_email_async(subject, body_text):
             msg.attach(part)
 
         # Port 465 SSL connection
-        server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=5)
+        server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=10)
         server.login(SENDER_EMAIL, clean_pwd)
         server.send_message(msg)
         server.quit()
@@ -53,9 +58,9 @@ def _send_email_async(subject, body_text):
     except Exception as e:
         print(f"Background Email Exception: {e}")
 
-def send_email_notification_async(subject, body_text):
+def send_email_notification_async(subject, body_text, file_to_attach=None, filename=None):
     """Triggers background thread so save operation never gets blocked"""
-    thread = threading.Thread(target=_send_email_async, args=(subject, body_text))
+    thread = threading.Thread(target=_send_email_async, args=(subject, body_text, file_to_attach, filename))
     thread.daemon = True
     thread.start()
 
@@ -192,17 +197,59 @@ if st.button("Save Heat Entry (हिट सेव्ह करा)", type="prim
         st.session_state["rows_count"] = 1
         st.success(f"✅ Heat No {int(current_heat_no)} saved successfully!")
         
-        # Async Notification (Never blocks UI/data saving)
+        # Async Notification
         subject = f"🚨 New Heat Entry: Heat No {int(current_heat_no)} ({st.session_state['operator_name']})"
         body = f"New Heat Entry Saved:\n\nDate: {date_str}\nTime: {time_str}\nHeat No: {int(current_heat_no)}\nOperator: {st.session_state['operator_name']}"
         send_email_notification_async(subject, body)
         
         st.rerun()
 
-# --- SIDEBAR CONTROLS ---
+# --- SIDEBAR CONTROLS WITH GET THE EMAIL BUTTON ---
 with st.sidebar:
     st.subheader("📧 Email Controls")
     st.info("Email notifications run automatically in the background.")
+    
+    st.markdown("---")
+    st.write("**Manual Monthly Email Report**")
+    
+    if os.path.exists(DATA_FILE):
+        df_mail_check = pd.read_csv(DATA_FILE)
+        if not df_mail_check.empty and "Date" in df_mail_check.columns:
+            df_mail_check["Date_dt"] = pd.to_datetime(df_mail_check["Date"])
+            df_mail_check["Month_Year"] = df_mail_check["Date_dt"].dt.strftime("%B %Y")
+            mail_months = df_mail_check["Month_Year"].unique().tolist()
+            
+            selected_mail_month = st.selectbox("Select Month for Email:", mail_months, key="sidebar_mail_month")
+            
+            if st.button("Get the Email", type="primary", use_container_width=True):
+                df_selected = df_mail_check[df_mail_check["Month_Year"] == selected_mail_month].copy()
+                
+                # Create pivot format table for clear readability
+                pivot_mail = df_selected.pivot_table(
+                    index=["Date", "Time", "Heat No", "Operator"],
+                    columns="Material",
+                    values="Weight",
+                    aggfunc="sum",
+                    fill_value=0
+                ).reset_index()
+                
+                for m in MATERIALS:
+                    if m not in pivot_mail.columns:
+                        pivot_mail[m] = 0.0
+                pivot_mail["Total Weight"] = pivot_mail[MATERIALS].sum(axis=1)
+                
+                csv_bytes = pivot_mail.to_csv(index=False).encode('utf-8')
+                filename = f"Furnace_Report_{selected_mail_month.replace(' ', '_')}.csv"
+                
+                subject = f"📊 Furnace Heat Report - {selected_mail_month}"
+                body = f"Hello,\n\nPlease find attached the monthly furnace charging report for {selected_mail_month}.\n\nTotal Records: {len(pivot_mail)}\nGrand Total Weight: {pivot_mail['Total Weight'].sum():.2f} Kg/Ton\n\nRegards,\nFurnace Charging System"
+                
+                send_email_notification_async(subject, body, file_to_attach=csv_bytes, filename=filename)
+                st.success(f"Email sent successfully for {selected_mail_month}!")
+        else:
+            st.warning("Data file is empty.")
+    else:
+        st.warning("No saved data found.")
 
 st.markdown("---")
 
