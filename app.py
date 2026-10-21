@@ -111,16 +111,13 @@ def get_next_heat_no(operator_name):
         if df_today.empty:
             return 1
             
-        # Check if same operator logged in within last 12 hours
         if st.session_state["login_time"]:
             time_diff = get_current_ist() - st.session_state["login_time"]
             if time_diff <= timedelta(hours=12):
-                # Find last heat number handled by this operator today, else continue max
                 df_op_today = df_today[df_today["Operator"] == operator_name]
                 if not df_op_today.empty:
                     return int(df_op_today["Heat No"].max())
         
-        # Otherwise, continue from today's max heat + 1
         max_heat = df_today["Heat No"].max()
         return int(max_heat) + 1
     except Exception:
