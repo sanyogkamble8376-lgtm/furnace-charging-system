@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import os
 import smtplib
@@ -22,12 +22,10 @@ def get_current_ist():
 
 # --- EMAIL CONFIGURATION ---
 SENDER_EMAIL = "swapnilchougule155@gmail.com"
-# NOTE: Ithe tumcha 16-character Google App Password vapara
 SENDER_PASSWORD = "ddyk iyhr iihr poon"
 RECEIVER_EMAIL = "swapnilchougule155@gmail.com"
 
 def _send_email_async(subject, body_text, file_to_attach=None, filename=None):
-    """Background thread to prevent UI freezing during email send"""
     try:
         clean_pwd = SENDER_PASSWORD.replace(" ", "")
         msg = MIMEMultipart()
@@ -36,7 +34,6 @@ def _send_email_async(subject, body_text, file_to_attach=None, filename=None):
         msg['Subject'] = subject
         msg.attach(MIMEText(body_text, 'plain'))
 
-        # Standard auto-attach full CSV or specific month CSV
         if file_to_attach is not None and filename is not None:
             part = MIMEApplication(file_to_attach, Name=filename)
             part['Content-Disposition'] = f'attachment; filename="{filename}"'
@@ -49,25 +46,24 @@ def _send_email_async(subject, body_text, file_to_attach=None, filename=None):
             part['Content-Disposition'] = f'attachment; filename="Furnace_Report_{today_str}.csv"'
             msg.attach(part)
 
-        # Port 587 TLS Connection (Fixes WinError 10013)
         with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as server:
             server.starttls()
             server.login(SENDER_EMAIL, clean_pwd)
             server.send_message(msg)
-            
-        print("Email Sent Successfully!")
     except Exception as e:
         print(f"Background Email Exception: {e}")
 
 def send_email_notification_async(subject, body_text, file_to_attach=None, filename=None):
-    """Triggers background thread so save operation never gets blocked"""
     thread = threading.Thread(target=_send_email_async, args=(subject, body_text, file_to_attach, filename))
     thread.daemon = True
     thread.start()
 
-# --- 1. SESSION MANAGEMENT ---
+# --- 1. SESSION MANAGEMENT & 12-HOUR LOGIC ---
 if "operator_name" not in st.session_state:
     st.session_state["operator_name"] = ""
+
+if "login_time" not in st.session_state:
+    st.session_state["login_time"] = None
 
 if "rows_count" not in st.session_state:
     st.session_state["rows_count"] = 1
@@ -82,7 +78,9 @@ if not st.session_state["operator_name"]:
         login_btn = st.form_submit_button("Login")
         if login_btn:
             if op_name.strip():
-                st.session_state["operator_name"] = op_name.strip()
+                clean_name = op_name.strip()
+                st.session_state["operator_name"] = clean_name
+                st.session_state["login_time"] = get_current_ist()
                 st.rerun()
             else:
                 st.warning("कृपया ऑपरेटरचे नाव टाका!")
@@ -95,10 +93,11 @@ with col_op1:
 with col_op2:
     if st.button("Logout", type="primary"):
         st.session_state["operator_name"] = ""
+        st.session_state["login_time"] = None
         st.rerun()
 
-# --- 3. AUTO HEAT NO LOGIC (IST) ---
-def get_next_heat_no():
+# --- 3. HEAT NO LOGIC WITH 12-HOUR CHECK ---
+def get_next_heat_no(operator_name):
     if not os.path.exists(DATA_FILE):
         return 1
     try:
@@ -111,13 +110,41 @@ def get_next_heat_no():
         
         if df_today.empty:
             return 1
-        else:
-            max_heat = df_today["Heat No"].max()
-            return int(max_heat) + 1
+            
+        # Check if same operator logged in within last 12 hours
+        if st.session_state["login_time"]:
+            time_diff = get_current_ist() - st.session_state["login_time"]
+            if time_diff <= timedelta(hours=12):
+                # Find last heat number handled by this operator today, else continue max
+                df_op_today = df_today[df_today["Operator"] == operator_name]
+                if not df_op_today.empty:
+                    return int(df_op_today["Heat No"].max())
+        
+        # Otherwise, continue from today's max heat + 1
+        max_heat = df_today["Heat No"].max()
+        return int(max_heat) + 1
     except Exception:
         return 1
 
-suggested_heat_no = get_next_heat_no()
+suggested_heat_no = get_next_heat_no(st.session_state["operator_name"])
+
+st.markdown("---")
+
+# --- DAILY SUMMARY METRICS ---
+if os.path.exists(DATA_FILE):
+    try:
+        df_summary = pd.read_csv(DATA_FILE)
+        today_str = get_current_ist().strftime("%Y-%m-%d")
+        if not df_summary.empty and "Date" in df_summary.columns:
+            df_today_sum = df_summary[df_summary["Date"] == today_str]
+            total_heats_today = df_today_sum["Heat No"].nunique() if not df_today_sum.empty else 0
+            total_wt_today = df_today_sum["Weight"].sum() if not df_today_sum.empty and "Weight" in df_today_sum.columns else 0.0
+            
+            c_m1, c_m2 = st.columns(2)
+            c_m1.metric("📊 आज झालेली एकूण हिट्स (Total Heats Today)", f"{total_heats_today}")
+            c_m2.metric("⚖️ आजचे एकूण चार्जिंग वजन (Total Weight Today)", f"{total_wt_today:.2f} Kg/Ton")
+    except Exception:
+        pass
 
 st.markdown("---")
 
@@ -125,7 +152,7 @@ st.markdown("---")
 col_h1, col_h2 = st.columns([2, 2])
 with col_h1:
     current_heat_no = st.number_input(
-        "Heat No (आजचा ऑटोमॅटिक पुढील हिट नंबर):", 
+        "Heat No (आजचा ऑटोमॅटिक हिट नंबर):", 
         value=suggested_heat_no, 
         min_value=1, 
         step=1
@@ -198,14 +225,13 @@ if st.button("Save Heat Entry (हिट सेव्ह करा)", type="prim
         st.session_state["rows_count"] = 1
         st.success(f"✅ Heat No {int(current_heat_no)} saved successfully!")
         
-        # Async Notification
         subject = f"🚨 New Heat Entry: Heat No {int(current_heat_no)} ({st.session_state['operator_name']})"
         body = f"New Heat Entry Saved:\n\nDate: {date_str}\nTime: {time_str}\nHeat No: {int(current_heat_no)}\nOperator: {st.session_state['operator_name']}"
         send_email_notification_async(subject, body)
         
         st.rerun()
 
-# --- SIDEBAR CONTROLS WITH GET THE EMAIL BUTTON ---
+# --- SIDEBAR EMAIL CONTROLS ---
 with st.sidebar:
     st.subheader("📧 Email Controls")
     st.info("Email notifications run automatically in the background.")
@@ -253,18 +279,8 @@ with st.sidebar:
                                 
                                 send_email_notification_async(subject, body, file_to_attach=csv_bytes, filename=filename)
                                 st.success(f"Email sent successfully for {selected_mail_month}!")
-                            else:
-                                st.warning("Please select a valid month.")
-                    else:
-                        st.warning("No valid month found in data.")
-                else:
-                    st.warning("No valid date records found.")
-            else:
-                st.warning("Data file is empty or missing 'Date' column.")
         except Exception as e:
             st.error(f"Error reading data for email: {e}")
-    else:
-        st.warning("No saved data found.")
 
 st.markdown("---")
 
@@ -274,7 +290,6 @@ st.subheader("🗓️ Month-wise Saved Report")
 if os.path.exists(DATA_FILE):
     try:
         df_all = pd.read_csv(DATA_FILE)
-        
         if not df_all.empty and "Date" in df_all.columns:
             df_all = df_all.dropna(subset=["Date"])
             df_all["Date_dt"] = pd.to_datetime(df_all["Date"], errors="coerce")
@@ -334,10 +349,6 @@ if os.path.exists(DATA_FILE):
                                     f"<h4 style='text-align: right; color: #1E88E5;'>Grand Total: {grand_total:.2f}</h4>", 
                                     unsafe_allow_html=True
                                 )
-                else:
-                    st.info("अद्याप कोणतेही वैध महिन्याचे रेकॉर्ड उपलब्ध नाही.")
-        else:
-            st.info("अद्याप कोणतेही रेकॉर्ड सेव्ह केलेले नाही.")
     except Exception as e:
         st.error(f"Error loading report: {e}")
 else:
