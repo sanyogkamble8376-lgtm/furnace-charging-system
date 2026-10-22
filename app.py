@@ -135,7 +135,7 @@ if os.path.exists(DATA_FILE):
         if not df_summary.empty and "Date" in df_summary.columns:
             df_today_sum = df_summary[df_summary["Date"] == today_str]
             total_heats_today = df_today_sum["Heat No"].nunique() if not df_today_sum.empty else 0
-            total_wt_today = df_today_sum["Weight"].sum() if not df_today_sum.empty and "Weight" in df_today_sum.columns else 0.0
+            total_wt_today = df_today_sum["Weight"].sum() if not df_today_sum.empty and "Weight" in df_summary.columns else 0.0
             
             c_m1, c_m2 = st.columns(2)
             c_m1.metric("📊 आज झालेली एकूण हिट्स (Total Heats Today)", f"{total_heats_today}")
@@ -145,7 +145,32 @@ if os.path.exists(DATA_FILE):
 
 st.markdown("---")
 
-# --- 4. CHARGING ENTRY FORM ---
+# --- 4. TARGET WEIGHT SETTINGS IN SIDEBAR ---
+with st.sidebar:
+    st.subheader("🎯 Material Target Weights")
+    st.write("प्रत्येक मटेरियलचे ठरलेले वजन सेट करा:")
+    
+    default_targets = {
+        "MS": 150.0,
+        "CRC": 150.0,
+        "CI": 100.0,
+        "PIG": 50.0,
+        "SG BORING": 100.0,
+        "CI BORING": 100.0,
+        "SOLED": 150.0,
+        "R.R": 150.0
+    }
+    
+    target_weights = {}
+    for mat in MATERIALS:
+        target_weights[mat] = st.number_input(
+            f"{mat} Target (Kg):", 
+            value=default_targets.get(mat, 150.0), 
+            step=1.0, 
+            key=f"target_{mat}"
+        )
+
+# --- 5. CHARGING ENTRY FORM ---
 col_h1, col_h2 = st.columns([2, 2])
 with col_h1:
     current_heat_no = st.number_input(
@@ -159,7 +184,7 @@ st.write("**Materials & Weight (मटेरियल्स आणि वजन 
 
 selected_entries = []
 for i in range(st.session_state["rows_count"]):
-    col_m, col_w = st.columns([2, 2])
+    col_m, col_w, col_status = st.columns([2, 2, 2])
     with col_m:
         mat = st.selectbox(
             f"Material #{i+1}", 
@@ -174,9 +199,20 @@ for i in range(st.session_state["rows_count"]):
             step=1.0, 
             value=None, 
             key=f"wt_{i}", 
-            placeholder="Weight (Kg/Ton)",
+            placeholder="Weight (Kg)",
             label_visibility="collapsed"
         )
+    with col_status:
+        if mat != "-- Select Material --" and wt is not None and wt > 0:
+            target_val = target_weights.get(mat, 150.0)
+            if wt == target_val:
+                st.markdown(f"<div style='background-color: #d4edda; color: #155724; padding: 8px; border-radius: 5px; text-align: center; font-weight: bold;'>🟢 अचूक वजन ({wt} == {target_val})</div>", unsafe_allow_html=True)
+            elif wt < target_val:
+                st.markdown(f"<div style='background-color: #fff3cd; color: #856404; padding: 8px; border-radius: 5px; text-align: center; font-weight: bold;'>🟡 वजन कमी आहे ({wt} < {target_val})</div>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<div style='background-color: #f8d7da; color: #721c24; padding: 8px; border-radius: 5px; text-align: center; font-weight: bold;'>🔴 वजन जास्त आहे ({wt} > {target_val})</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='color: gray; padding: 8px; text-align: center;'>वजन प्रविष्ट करा</div>", unsafe_allow_html=True)
     
     if mat != "-- Select Material --" and wt is not None and wt > 0:
         selected_entries.append((mat, wt))
@@ -230,6 +266,7 @@ if st.button("Save Heat Entry (हिट सेव्ह करा)", type="prim
 
 # --- SIDEBAR EMAIL CONTROLS ---
 with st.sidebar:
+    st.markdown("---")
     st.subheader("📧 Email Controls")
     st.info("Email notifications run automatically in the background.")
     
@@ -281,7 +318,7 @@ with st.sidebar:
 
 st.markdown("---")
 
-# --- 5. SAVED RECORDS & REPORT ---
+# --- 6. SAVED RECORDS & REPORT ---
 st.subheader("🗓️ Month-wise Saved Report")
 
 if os.path.exists(DATA_FILE):
