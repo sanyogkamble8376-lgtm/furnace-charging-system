@@ -367,6 +367,23 @@ if os.path.exists(DATA_FILE):
                             st.markdown("<h4 style='text-align: center;'>Saved Records Data Table</h4>", unsafe_allow_html=True)
                             st.dataframe(display_df, use_container_width=True)
                             
+                            # --- 📈 GRAPHICAL ANALYTICS SECTION ---
+                            st.markdown("<h4 style='text-align: center;'>📈 Visual Analytics & Graphs</h4>", unsafe_allow_html=True)
+                            
+                            # 1. Material-wise Total Weight Bar Chart
+                            material_totals = pivot_df[MATERIALS].sum()
+                            material_totals_df = pd.DataFrame({"Material": MATERIALS, "Total Weight": [material_totals[m] for m in MATERIALS]})
+                            material_totals_df = material_totals_df.set_index("Material")
+                            
+                            st.write("**मटेरियलनुसार एकूण वजन (Total Weight by Material):**")
+                            st.bar_chart(material_totals_df)
+                            
+                            # 2. Heat-wise Total Weight Line Chart
+                            if not pivot_df.empty:
+                                heat_chart_df = pivot_df[["Heat No", "Total Weight"]].set_index("Heat No")
+                                st.write("**हिटनुसार एकूण वजन (Total Weight per Heat):**")
+                                st.line_chart(heat_chart_df)
+                            
                             grand_total = pivot_df["Total Weight"].sum()
                             
                             col_t1, col_t2 = st.columns([2, 2])
