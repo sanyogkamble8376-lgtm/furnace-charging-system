@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta
+from email.mime.application import MIMEApplication
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import os
 import smtplib
 import threading
-from email.mime.application import MIMEApplication
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 import pandas as pd
 import plotly.express as px
 import pytz
@@ -29,7 +30,14 @@ SENDER_PASSWORD = "ddyk iyhr iihr poon"
 RECEIVER_EMAIL = "swapnilchougule155@gmail.com"
 
 
-def _send_email_async(subject, body_text, file_to_attach=None, filename=None):
+def _send_email_async(
+    subject,
+    body_text,
+    file_to_attach=None,
+    filename=None,
+    image_bytes=None,
+    img_filename="furnace_graph.png",
+):
   try:
     clean_pwd = SENDER_PASSWORD.replace(" ", "")
     msg = MIMEMultipart()
@@ -38,11 +46,12 @@ def _send_email_async(subject, body_text, file_to_attach=None, filename=None):
     msg["Subject"] = subject
     msg.attach(MIMEText(body_text, "plain"))
 
+    # CSV File Attachment
     if file_to_attach is not None and filename is not None:
       part = MIMEApplication(file_to_attach, Name=filename)
       part["Content-Disposition"] = f'attachment; filename="{filename}"'
       msg.attach(part)
-    elif os.path.exists(DATA_FILE):
+    elif os.path.exists(DATA_FILE) and file_to_attach is None:
       df = pd.read_csv(DATA_FILE)
       today_str = get_current_ist().strftime("%Y-%m-%d")
       csv_bytes = df.to_csv(index=False).encode("utf-8")
@@ -51,6 +60,14 @@ def _send_email_async(subject, body_text, file_to_attach=None, filename=None):
           "Content-Disposition"
       ] = f'attachment; filename="Furnace_Report_{today_str}.csv"'
       msg.attach(part)
+
+    # Graph Image Attachment
+    if image_bytes is not None:
+      img_part = MIMEImage(image_bytes, name=img_filename)
+      img_part["Content-Disposition"] = (
+          f'attachment; filename="{img_filename}"'
+      )
+      msg.attach(img_part)
 
     with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
       server.starttls()
@@ -61,11 +78,23 @@ def _send_email_async(subject, body_text, file_to_attach=None, filename=None):
 
 
 def send_email_notification_async(
-    subject, body_text, file_to_attach=None, filename=None
+    subject,
+    body_text,
+    file_to_attach=None,
+    filename=None,
+    image_bytes=None,
+    img_filename="furnace_graph.png",
 ):
   thread = threading.Thread(
       target=_send_email_async,
-      args=(subject, body_text, file_to_attach, filename),
+      args=(
+          subject,
+          body_text,
+          file_to_attach,
+          filename,
+          image_bytes,
+          img_filename,
+      ),
   )
   thread.daemon = True
   thread.start()
@@ -375,14 +404,64 @@ with st.sidebar:
                     pivot_mail[m] = 0.0
                 pivot_mail["Total Weight"] = pivot_mail[MATERIALS].sum(axis=1)
 
+                # --- 📊 Email साठी Red/Yellow/Green Graph बनवणे ---
+                chart_data_mail = []
+                for m in MATERIALS:
+                  mat_wt = pivot_mail[m].sum() if m in pivot_mail.columns else 0.0
+                  count_heats = (
+                      (pivot_mail[m] > 0).sum() if m in pivot_mail.columns else 1
+                  )
+                  if count_heats == 0:
+                    count_heats = 1
+                  avg_wt = mat_wt / count_heats
+                  target_val = target_weights.get(m, 150.0)
+
+                  if avg_wt == target_val:
+                    status = "🟢 अचूक (Green)"
+                  elif avg_wt < target_val:
+                    status = "🟡 कमी (Yellow)"
+                  else:
+                    status = "🔴 जास्त (Red)"
+
+                  chart_data_mail.append({
+                      "Material": m,
+                      "Average Weight": avg_wt,
+                      "Target": target_val,
+                      "Status": status,
+                  })
+
+                df_chart_mail = pd.DataFrame(chart_data_mail)
+                fig_mail = px.bar(
+                    df_chart_mail,
+                    x="Material",
+                    y="Average Weight",
+                    color="Status",
+                    color_discrete_map={
+                        "🟢 अचूक (Green)": "#28a745",
+                        "🟡 कमी (Yellow)": "#ffc107",
+                        "🔴 जास्त (Red)": "#dc3545",
+                    },
+                    title=f"Material Status Report - {selected_mail_month}",
+                )
+
+                # Graph ला PNG इमेजबायट्समध्ये Convert करणे
+                try:
+                  img_bytes = fig_mail.to_image(format="png")
+                except Exception as img_err:
+                  img_bytes = None
+                  print(f"Graph image generation error: {img_err}")
+
                 csv_bytes = pivot_mail.to_csv(index=False).encode("utf-8")
                 filename = f"Furnace_Report_{str(selected_mail_month).replace(' ', '_')}.csv"
 
-                subject = f"📊 Furnace Heat Report - {selected_mail_month}"
+                subject = (
+                    f"📊 Furnace Heat Report & Graph - {selected_mail_month}"
+                )
                 body = (
                     f"Hello,\n\nPlease find attached the monthly furnace"
-                    f" charging report for {selected_mail_month}.\n\nTotal"
-                    f" Records: {len(pivot_mail)}\nGrand Total Weight:"
+                    f" charging CSV report and visual graph analytics for"
+                    f" {selected_mail_month}.\n\nTotal Records:"
+                    f" {len(pivot_mail)}\nGrand Total Weight:"
                     f" {pivot_mail['Total Weight'].sum():.2f}"
                     f" Kg/Ton\n\nRegards,\nFurnace Charging System"
                 )
@@ -392,9 +471,12 @@ with st.sidebar:
                     body,
                     file_to_attach=csv_bytes,
                     filename=filename,
+                    image_bytes=img_bytes,
+                    img_filename=f"Furnace_Graph_{str(selected_mail_month).replace(' ', '_')}.png",
                 )
                 st.success(
-                    f"Email sent successfully for {selected_mail_month}!"
+                    "Email with CSV Report and Graph Image sent successfully"
+                    f" for {selected_mail_month}!"
                 )
     except Exception as e:
       st.error(f"Error reading data for email: {e}")
@@ -464,14 +546,13 @@ if os.path.exists(DATA_FILE):
               )
               st.dataframe(display_df, use_container_width=True)
 
-              # --- 📈 GRAPHICAL ANALYTICS SECTION (COLORFUL PLOTLY BAR CHART) ---
+              # --- 📈 GRAPHICAL ANALYTICS SECTION ---
               st.markdown(
                   "<h4 style='text-align: center;'>📈 Visual Analytics &"
                   " Graphs</h4>",
                   unsafe_allow_html=True,
               )
 
-              # Prepare data comparing Average Weight per Heat against Target Weight
               chart_data = []
               for m in MATERIALS:
                 mat_wt = pivot_df[m].sum() if m in pivot_df.columns else 0.0
@@ -481,10 +562,8 @@ if os.path.exists(DATA_FILE):
                 if count_heats == 0:
                   count_heats = 1
                 avg_wt = mat_wt / count_heats
+                target_val = target_weights.get(m, 150.0)
 
-                target_val = target_weights.get(mat, 150.0)
-
-                # Status & Color assignment based on target comparison
                 if avg_wt == target_val:
                   status = "🟢 अचूक (Green)"
                 elif avg_wt < target_val:
@@ -501,7 +580,6 @@ if os.path.exists(DATA_FILE):
 
               df_chart = pd.DataFrame(chart_data)
 
-              # Plotly Bar Chart with Red, Yellow, Green colors
               fig = px.bar(
                   df_chart,
                   x="Material",
