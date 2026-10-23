@@ -46,7 +46,6 @@ def _send_email_async(
     msg["Subject"] = subject
     msg.attach(MIMEText(body_text, "plain"))
 
-    # CSV File Attachment
     if file_to_attach is not None and filename is not None:
       part = MIMEApplication(file_to_attach, Name=filename)
       part["Content-Disposition"] = f'attachment; filename="{filename}"'
@@ -61,7 +60,6 @@ def _send_email_async(
       ] = f'attachment; filename="Furnace_Report_{today_str}.csv"'
       msg.attach(part)
 
-    # Graph Image Attachment
     if image_bytes is not None:
       img_part = MIMEImage(image_bytes, name=img_filename)
       img_part["Content-Disposition"] = (
@@ -404,7 +402,6 @@ with st.sidebar:
                     pivot_mail[m] = 0.0
                 pivot_mail["Total Weight"] = pivot_mail[MATERIALS].sum(axis=1)
 
-                # --- 📊 Email साठी Red/Yellow/Green Graph बनवणे ---
                 chart_data_mail = []
                 for m in MATERIALS:
                   mat_wt = pivot_mail[m].sum() if m in pivot_mail.columns else 0.0
@@ -416,7 +413,7 @@ with st.sidebar:
                   avg_wt = mat_wt / count_heats
                   target_val = target_weights.get(m, 150.0)
 
-                  if avg_wt == target_val:
+                  if avg_wt == target_val and avg_wt > 0:
                     status = "🟢 अचूक (Green)"
                   elif avg_wt < target_val:
                     status = "🟡 कमी (Yellow)"
@@ -431,6 +428,16 @@ with st.sidebar:
                   })
 
                 df_chart_mail = pd.DataFrame(chart_data_mail)
+                df_chart_mail["Status"] = pd.Categorical(
+                    df_chart_mail["Status"],
+                    categories=[
+                        "🟢 अचूक (Green)",
+                        "🟡 कमी (Yellow)",
+                        "🔴 जास्त (Red)",
+                    ],
+                    ordered=True,
+                )
+
                 fig_mail = px.bar(
                     df_chart_mail,
                     x="Material",
@@ -442,9 +449,15 @@ with st.sidebar:
                         "🔴 जास्त (Red)": "#dc3545",
                     },
                     title=f"Material Status Report - {selected_mail_month}",
+                    category_orders={
+                        "Status": [
+                            "🟢 अचूक (Green)",
+                            "🟡 कमी (Yellow)",
+                            "🔴 जास्त (Red)",
+                        ]
+                    },
                 )
 
-                # Graph ला PNG इमेजबायट्समध्ये Convert करणे
                 try:
                   img_bytes = fig_mail.to_image(format="png")
                 except Exception as img_err:
@@ -546,25 +559,46 @@ if os.path.exists(DATA_FILE):
               )
               st.dataframe(display_df, use_container_width=True)
 
-              # --- 📈 GRAPHICAL ANALYTICS SECTION ---
+              # --- 📈 GRAPHICAL ANALYTICS SECTION (Date-wise & Material Status) ---
               st.markdown(
                   "<h4 style='text-align: center;'>📈 Visual Analytics &"
-                  " Graphs</h4>",
+                  " Graphs (Date-wise Filter)</h4>",
                   unsafe_allow_html=True,
               )
 
+              # Date filter for graph view
+              available_dates = pivot_df["Date"].unique().tolist()
+              selected_date_filter = st.selectbox(
+                  "दिनांक फिल्टर निवडा (Select Date for Graph):",
+                  ["सर्व तारखा (All Dates - Monthly View)"] + available_dates,
+              )
+
+              if selected_date_filter != "सर्व तारखा (All Dates - Monthly View)":
+                df_graph_source = pivot_df[
+                    pivot_df["Date"] == selected_date_filter
+                ]
+              else:
+                df_graph_source = pivot_df
+
               chart_data = []
               for m in MATERIALS:
-                mat_wt = pivot_df[m].sum() if m in pivot_df.columns else 0.0
+                mat_wt = (
+                    df_graph_source[m].sum()
+                    if m in df_graph_source.columns
+                    else 0.0
+                )
                 count_heats = (
-                    (pivot_df[m] > 0).sum() if m in pivot_df.columns else 1
+                    (df_graph_source[m] > 0).sum()
+                    if m in df_graph_source.columns
+                    else 1
                 )
                 if count_heats == 0:
                   count_heats = 1
                 avg_wt = mat_wt / count_heats
                 target_val = target_weights.get(m, 150.0)
 
-                if avg_wt == target_val:
+                # Status check: Green (Exact), Yellow (Less), Red (More)
+                if avg_wt == target_val and avg_wt > 0:
                   status = "🟢 अचूक (Green)"
                 elif avg_wt < target_val:
                   status = "🟡 कमी (Yellow)"
@@ -580,6 +614,17 @@ if os.path.exists(DATA_FILE):
 
               df_chart = pd.DataFrame(chart_data)
 
+              # Force categories so all three colors (Green, Yellow, Red) appear in legend
+              df_chart["Status"] = pd.Categorical(
+                  df_chart["Status"],
+                  categories=[
+                      "🟢 अचूक (Green)",
+                      "🟡 कमी (Yellow)",
+                      "🔴 जास्त (Red)",
+                  ],
+                  ordered=True,
+              )
+
               fig = px.bar(
                   df_chart,
                   x="Material",
@@ -591,29 +636,36 @@ if os.path.exists(DATA_FILE):
                       "🔴 जास्त (Red)": "#dc3545",
                   },
                   title=(
-                      "मटेरियलनुसार सरासरी वजन विरुद्ध टार्गेट (Material-wise"
-                      " Status Chart)"
+                      "मटेरियलनुसार वजन स्टेटस (Green: अचूक, Yellow: कमी, Red:"
+                      " जास्त)"
                   ),
+                  category_orders={
+                      "Status": [
+                          "🟢 अचूक (Green)",
+                          "🟡 कमी (Yellow)",
+                          "🔴 जास्त (Red)",
+                      ]
+                  },
               )
               st.plotly_chart(fig, use_container_width=True)
 
               # Heat-wise Line Chart
-              if not pivot_df.empty:
+              if not df_graph_source.empty:
                 heat_chart_df = (
-                    pivot_df[["Heat No", "Total Weight"]]
+                    df_graph_source[["Heat No", "Total Weight"]]
                     .set_index("Heat No")
                     .sort_index()
                 )
                 st.write("**हिटनुसार एकूण वजन (Total Weight per Heat):**")
                 st.line_chart(heat_chart_df)
 
-              grand_total = pivot_df["Total Weight"].sum()
+              grand_total = df_graph_source["Total Weight"].sum()
 
               col_t1, col_t2 = st.columns([2, 2])
               with col_t1:
-                csv_data = pivot_df.to_csv(index=False).encode("utf-8")
+                csv_data = df_graph_source.to_csv(index=False).encode("utf-8")
                 st.download_button(
-                    label="📥 Download Month Report (CSV)",
+                    label="📥 Download Report (CSV)",
                     data=csv_data,
                     file_name=(
                         "Furnace_Report_"
