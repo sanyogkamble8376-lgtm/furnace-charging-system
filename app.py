@@ -26,7 +26,7 @@ def get_current_ist():
 
 # --- EMAIL CONFIGURATION ---
 SENDER_EMAIL = "swapnilchougule155@gmail.com"
-SENDER_PASSWORD = "ddyk iyhr iihr poon"
+SENDER_PASSWORD = "oajf cgcx wrpx dsue"
 RECEIVER_EMAIL = "swapnilchougule155@gmail.com"
 
 
