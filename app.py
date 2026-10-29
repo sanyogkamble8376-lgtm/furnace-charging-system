@@ -561,7 +561,7 @@ if os.path.exists(DATA_FILE):
               )
               st.dataframe(display_df, use_container_width=True)
 
-              # --- 📈 GRAPHICAL ANALYTICS SECTION (Date-wise & Material Status) ---
+              # --- 📈 GRAPHICAL ANALYTICS SECTION (3-Color Status Graph & Table) ---
               st.markdown(
                   "<h4 style='text-align: center;'>📈 Visual Analytics &"
                   " Graphs (Date-wise Filter)</h4>",
@@ -602,10 +602,10 @@ if os.path.exists(DATA_FILE):
                 avg_wt = mat_wt / count_heats
                 target_val = target_weights.get(m, 150.0)
 
-                # Difference calculation (किती किलोने जास्त किंवा कमी)
+                # Difference calculation
                 diff = avg_wt - target_val
 
-                # Status check: Green (Exact), Yellow (Less), Red (More)
+                # Status check: Green, Yellow, Red
                 if avg_wt == target_val and avg_wt > 0:
                   status = "🟢 अचूक (Green)"
                 elif avg_wt < target_val:
@@ -613,7 +613,7 @@ if os.path.exists(DATA_FILE):
                 else:
                   status = "🔴 जास्त (Red)"
 
-                # Text label मध्ये व्हॅल्यू आणि फरक (उदा. +62.0 kg किंवा -35.0 kg)
+                # Label for bar chart
                 if avg_wt > 0:
                   diff_str = (
                       f"+{diff:.1f} kg" if diff > 0 else f"{diff:.1f} kg"
@@ -625,14 +625,15 @@ if os.path.exists(DATA_FILE):
                 chart_data.append({
                     "Material": m,
                     "Average Weight": avg_wt,
-                    "Target": target_val,
+                    "Target Weight": target_val,
+                    "Difference (Kg)": f"{diff:+.1f} kg",
                     "Status": status,
                     "Text_Label": text_label,
                 })
 
               df_chart = pd.DataFrame(chart_data)
 
-              # Force categories so all three colors appear in legend
+              # Force 3-color categories
               df_chart["Status"] = pd.Categorical(
                   df_chart["Status"],
                   categories=[
@@ -643,6 +644,7 @@ if os.path.exists(DATA_FILE):
                   ordered=True,
               )
 
+              # 1. Plotly Bar Chart Display
               fig = px.bar(
                   df_chart,
                   x="Material",
@@ -655,8 +657,7 @@ if os.path.exists(DATA_FILE):
                       "🔴 जास्त (Red)": "#dc3545",
                   },
                   title=(
-                      "मटेरियलनुसार वजन स्टेटस व फरक (Green: अचूक, Yellow: कमी,"
-                      " Red: जास्त)"
+                      "मटेरियलनुसार वजन स्टेटस व फरक (3-Color Status Graph)"
                   ),
                   category_orders={
                       "Status": [
@@ -667,12 +668,31 @@ if os.path.exists(DATA_FILE):
                   },
               )
 
-              # Bar वर टेक्स्ट व्यवस्थित दिसण्यासाठी
               fig.update_traces(
                   texttemplate="%{text}",
                   textposition="auto",
               )
               st.plotly_chart(fig, use_container_width=True)
+
+              # 2. Data Breakdown Table Below Graph
+              st.markdown("### 📋 Material Breakdown & Difference Table")
+              table_display = df_chart[
+                  [
+                      "Material",
+                      "Average Weight",
+                      "Target Weight",
+                      "Difference (Kg)",
+                      "Status",
+                  ]
+              ].copy()
+              table_display["Average Weight"] = table_display[
+                  "Average Weight"
+              ].apply(lambda x: f"{x:.2f} kg")
+              table_display["Target Weight"] = table_display[
+                  "Target Weight"
+              ].apply(lambda x: f"{x:.2f} kg")
+
+              st.dataframe(table_display, use_container_width=True)
 
               # Heat-wise Line Chart
               if not df_graph_source.empty:
