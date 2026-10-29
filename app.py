@@ -26,7 +26,7 @@ def get_current_ist():
 
 # --- EMAIL CONFIGURATION ---
 SENDER_EMAIL = "swapnilchougule155@gmail.com"
-SENDER_PASSWORD = "oajf cgcx wrpx dsue"
+SENDER_PASSWORD = "oajf cgcx wrpx dsues"
 RECEIVER_EMAIL = "swapnilchougule155@gmail.com"
 
 
@@ -212,10 +212,10 @@ with st.sidebar:
   default_targets = {
       "MS": 150.0,
       "CRC": 150.0,
-      "CI": 100.0,
-      "PIG": 50.0,
-      "SG BORING": 100.0,
-      "CI BORING": 100.0,
+      "CI": 150.0,
+      "PIG": 150.0,
+      "SG BORING": 150.0,
+      "CI BORING": 150.0,
       "SOLED": 150.0,
       "R.R": 150.0,
   }
