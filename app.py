@@ -26,7 +26,7 @@ def get_current_ist():
 
 # --- EMAIL CONFIGURATION ---
 SENDER_EMAIL = "swapnilchougule155@gmail.com"
-SENDER_PASSWORD = "oajf cgcx wrpx dsues"
+SENDER_PASSWORD = "deac qbfg nmvi qsgc"
 RECEIVER_EMAIL = "swapnilchougule155@gmail.com"
 
 
@@ -693,16 +693,6 @@ if os.path.exists(DATA_FILE):
               ].apply(lambda x: f"{x:.2f} kg")
 
               st.dataframe(table_display, use_container_width=True)
-
-              # Heat-wise Line Chart
-              if not df_graph_source.empty:
-                heat_chart_df = (
-                    df_graph_source[["Heat No", "Total Weight"]]
-                    .set_index("Heat No")
-                    .sort_index()
-                )
-                st.write("**हिटनुसार एकूण वजन (Total Weight per Heat):**")
-                st.line_chart(heat_chart_df)
 
               grand_total = df_graph_source["Total Weight"].sum()
 
