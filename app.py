@@ -404,7 +404,9 @@ with st.sidebar:
 
                 chart_data_mail = []
                 for m in MATERIALS:
-                  mat_wt = pivot_mail[m].sum() if m in pivot_mail.columns else 0.0
+                  mat_wt = (
+                      pivot_mail[m].sum() if m in pivot_mail.columns else 0.0
+                  )
                   count_heats = (
                       (pivot_mail[m] > 0).sum() if m in pivot_mail.columns else 1
                   )
@@ -573,7 +575,10 @@ if os.path.exists(DATA_FILE):
                   ["सर्व तारखा (All Dates - Monthly View)"] + available_dates,
               )
 
-              if selected_date_filter != "सर्व तारखा (All Dates - Monthly View)":
+              if (
+                  selected_date_filter
+                  != "सर्व तारखा (All Dates - Monthly View)"
+              ):
                 df_graph_source = pivot_df[
                     pivot_df["Date"] == selected_date_filter
                 ]
@@ -597,6 +602,9 @@ if os.path.exists(DATA_FILE):
                 avg_wt = mat_wt / count_heats
                 target_val = target_weights.get(m, 150.0)
 
+                # Difference calculation (किती किलोने जास्त किंवा कमी)
+                diff = avg_wt - target_val
+
                 # Status check: Green (Exact), Yellow (Less), Red (More)
                 if avg_wt == target_val and avg_wt > 0:
                   status = "🟢 अचूक (Green)"
@@ -605,16 +613,26 @@ if os.path.exists(DATA_FILE):
                 else:
                   status = "🔴 जास्त (Red)"
 
+                # Text label मध्ये व्हॅल्यू आणि फरक (उदा. +62.0 kg किंवा -35.0 kg)
+                if avg_wt > 0:
+                  diff_str = (
+                      f"+{diff:.1f} kg" if diff > 0 else f"{diff:.1f} kg"
+                  )
+                  text_label = f"{avg_wt:.1f}\n({diff_str})"
+                else:
+                  text_label = "0.0"
+
                 chart_data.append({
                     "Material": m,
                     "Average Weight": avg_wt,
                     "Target": target_val,
                     "Status": status,
+                    "Text_Label": text_label,
                 })
 
               df_chart = pd.DataFrame(chart_data)
 
-              # Force categories so all three colors (Green, Yellow, Red) appear in legend
+              # Force categories so all three colors appear in legend
               df_chart["Status"] = pd.Categorical(
                   df_chart["Status"],
                   categories=[
@@ -630,14 +648,15 @@ if os.path.exists(DATA_FILE):
                   x="Material",
                   y="Average Weight",
                   color="Status",
+                  text="Text_Label",
                   color_discrete_map={
                       "🟢 अचूक (Green)": "#28a745",
                       "🟡 कमी (Yellow)": "#ffc107",
                       "🔴 जास्त (Red)": "#dc3545",
                   },
                   title=(
-                      "मटेरियलनुसार वजन स्टेटस (Green: अचूक, Yellow: कमी, Red:"
-                      " जास्त)"
+                      "मटेरियलनुसार वजन स्टेटस व फरक (Green: अचूक, Yellow: कमी,"
+                      " Red: जास्त)"
                   ),
                   category_orders={
                       "Status": [
@@ -646,6 +665,12 @@ if os.path.exists(DATA_FILE):
                           "🔴 जास्त (Red)",
                       ]
                   },
+              )
+
+              # Bar वर टेक्स्ट व्यवस्थित दिसण्यासाठी
+              fig.update_traces(
+                  texttemplate="%{text}",
+                  textposition="auto",
               )
               st.plotly_chart(fig, use_container_width=True)
 
