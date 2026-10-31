@@ -348,7 +348,7 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
                             avg_v = pivot_df[m].mean() if m in pivot_df.columns else 0
                             if abs(avg_v - t_val) < 1e-5 and avg_v > 0:
                                 target_summary.append(m)
-                        match_str = ", ".join(target_summary) if target_summary else "Konihi Nahi"
+                        match_str = ", ".join(target_summary) if target_summary else "NO "
                         st.success(f"🎯 **Target Pramane Saman/Achuk:**\n\n**{match_str}**")
 
                 # --- 📈 GRAPHICAL ANALYTICS SECTION ---
