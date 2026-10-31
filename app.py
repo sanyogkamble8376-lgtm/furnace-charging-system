@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from email.mime.application import MIMEApplication
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
@@ -16,7 +16,6 @@ st.set_page_config(page_title="Furnace Charging System", layout="wide")
 DATA_FILE = "heat_records.csv"
 MATERIALS = ["MS", "CRC", "CI", "PIG", "SG BORING", "CI BORING", "SOLED", "R.R"]
 
-# --- INDIAN TIMEZONE (IST) ---
 IST = pytz.timezone("Asia/Kolkata")
 
 
@@ -24,7 +23,29 @@ def get_current_ist():
     return datetime.now(IST)
 
 
-# --- EMAIL CONFIGURATION ---
+def clean_and_fix_existing_csv():
+    if os.path.exists(DATA_FILE):
+        try:
+            df = pd.read_csv(DATA_FILE)
+            if "Material" in df.columns:
+                df["Material"] = df["Material"].str.strip().str.upper()
+                replacements = {
+                    "C.I BORING": "CI BORING",
+                    "C.I. BORING": "CI BORING",
+                    "S.G BORING": "SG BORING",
+                    "S.G. BORING": "SG BORING",
+                    "SOLID": "SOLED",
+                    "C.I": "CI",
+                    "C.I.": "CI",
+                }
+                df["Material"] = df["Material"].replace(replacements)
+                df.to_csv(DATA_FILE, index=False)
+        except Exception as e:
+            print(f"Error cleaning CSV: {e}")
+
+
+clean_and_fix_existing_csv()
+
 SENDER_EMAIL = "swapnilchougule155@gmail.com"
 SENDER_PASSWORD = "deac qbfg nmvi qsgc"
 RECEIVER_EMAIL = "swapnilchougule155@gmail.com"
@@ -50,7 +71,7 @@ def _send_email_async(
             part = MIMEApplication(file_to_attach, Name=filename)
             part["Content-Disposition"] = f'attachment; filename="{filename}"'
             msg.attach(part)
-        elif os.path.exists(DATA_FILE) and file_to_attach is None:
+        elif os.path.exists(DATA_FILE):
             df = pd.read_csv(DATA_FILE)
             today_str = get_current_ist().strftime("%Y-%m-%d")
             csv_bytes = df.to_csv(index=False).encode("utf-8")
@@ -98,19 +119,14 @@ def send_email_notification_async(
     thread.start()
 
 
-# --- 1. SESSION MANAGEMENT ---
 if "operator_name" not in st.session_state:
     st.session_state["operator_name"] = ""
-
-if "login_time" not in st.session_state:
-    st.session_state["login_time"] = None
 
 st.markdown(
     "<h2 style='text-align: center;'>🔥 Furnace Charging Entry System</h2>",
     unsafe_allow_html=True,
 )
 
-# --- 2. OPERATOR LOGIN ---
 if not st.session_state["operator_name"]:
     st.subheader("👤 Operator Login")
     with st.form("login_form"):
@@ -118,61 +134,24 @@ if not st.session_state["operator_name"]:
         login_btn = st.form_submit_button("Login")
         if login_btn:
             if op_name.strip():
-                clean_name = op_name.strip()
-                st.session_state["operator_name"] = clean_name
-                st.session_state["login_time"] = get_current_ist()
+                st.session_state["operator_name"] = op_name.strip()
                 st.rerun()
             else:
                 st.warning("कृपया ऑपरेटरचे नाव टाका!")
     st.stop()
 
-# --- OPERATOR BANNER ---
 col_op1, col_op2 = st.columns([4, 1])
 with col_op1:
-    st.success(
-        f"**सक्रिय ऑपरेटर (Active Operator):**"
-        f" {st.session_state['operator_name']}"
-    )
+    st.success(f"**सक्रिय ऑपरेटर (Active Operator):** {st.session_state['operator_name']}")
 with col_op2:
     if st.button("Logout", type="primary"):
         st.session_state["operator_name"] = ""
-        st.session_state["login_time"] = None
         st.rerun()
 
 st.markdown("---")
 
-# --- DAILY SUMMARY METRICS ---
-if os.path.exists(DATA_FILE):
-    try:
-        df_summary = pd.read_csv(DATA_FILE)
-        today_str = get_current_ist().strftime("%Y-%m-%d")
-        if not df_summary.empty and "Date" in df_summary.columns:
-            df_today_sum = df_summary[df_summary["Date"] == today_str]
-            total_entries_today = len(df_today_sum)
-            total_wt_today = (
-                df_today_sum["Weight"].sum()
-                if not df_today_sum.empty and "Weight" in df_summary.columns
-                else 0.0
-            )
-
-            c_m1, c_m2 = st.columns(2)
-            c_m1.metric(
-                "📊 आज झालेς्या एकूण नोंदी (Total Entries Today)", f"{total_entries_today}"
-            )
-            c_m2.metric(
-                "⚖️ आजचे एकूण चार्जिंग वजन (Total Weight Today)",
-                f"{total_wt_today:.2f} Kg/Ton",
-            )
-    except Exception:
-        pass
-
-st.markdown("---")
-
-# --- 4. TARGET WEIGHT SETTINGS IN SIDEBAR ---
 with st.sidebar:
     st.subheader("🎯 Material Target Weights")
-    st.write("प्रत्येक मटेरियलचे ठरलेले वजन सेट करा:")
-
     default_targets = {
         "MS": 150.0,
         "CRC": 150.0,
@@ -183,7 +162,6 @@ with st.sidebar:
         "SOLED": 150.0,
         "R.R": 150.0,
     }
-
     target_weights = {}
     for mat in MATERIALS:
         target_weights[mat] = st.number_input(
@@ -193,60 +171,66 @@ with st.sidebar:
             key=f"target_{mat}",
         )
 
-# --- 5. VERTICAL CHARGING ENTRY FORM ---
-st.subheader("📝 Raw Material Weight Entry (Vertical Format)")
-st.write("खाली सर्व मटेरियल्सची नावे दिलेली आहेत, त्यांचे वजन समोर टाका:")
-
+st.subheader("📝 Raw Material Weight Entry")
 form_weights = {}
 
-# Creating a clean vertical layout for each material
 for mat in MATERIALS:
     col_label, col_input, col_status = st.columns([2, 2, 3])
-    
     with col_label:
         st.markdown(f"**{mat}**")
-        
     with col_input:
-        wt = st.number_input(
+        wt_str = st.text_input(
             f"Weight for {mat}",
-            min_value=0.0,
-            step=1.0,
-            value=0.0,
+            value="",
+            placeholder="वजन टाका (उदा. 150)",
             key=f"vert_wt_{mat}",
-            label_visibility="collapsed"
+            label_visibility="collapsed",
         )
-        form_weights[mat] = wt
-        
+        form_weights[mat] = wt_str
     with col_status:
         target_val = target_weights.get(mat, 150.0)
+        try:
+            wt = float(wt_str) if wt_str.strip() else 0.0
+        except ValueError:
+            wt = 0.0
+
         if wt > 0:
             if wt == target_val:
                 st.markdown(
-                    f"<div style='background-color: #d4edda; color: #155724; padding: 5px; border-radius: 5px; text-align: center; font-size: 14px;'>🟢 अचूक ({wt} == {target_val})</div>",
+                    f"<div style='background-color:#d4edda; color:#155724; padding:5px; border-radius:5px; text-align:center;'>🟢 अचूक ({wt} == {target_val})</div>",
                     unsafe_allow_html=True,
                 )
             elif wt < target_val:
                 st.markdown(
-                    f"<div style='background-color: #fff3cd; color: #856404; padding: 5px; border-radius: 5px; text-align: center; font-size: 14px;'>🟡 कमी ({wt} < {target_val})</div>",
+                    f"<div style='background-color:#fff3cd; color:#856404; padding:5px; border-radius:5px; text-align:center;'>🟡 कमी ({wt} < {target_val})</div>",
                     unsafe_allow_html=True,
                 )
             else:
                 st.markdown(
-                    f"<div style='background-color: #f8d7da; color: #721c24; padding: 5px; border-radius: 5px; text-align: center; font-size: 14px;'>🔴 जास्त ({wt} > {target_val})</div>",
+                    f"<div style='background-color:#f8d7da; color:#721c24; padding:5px; border-radius:5px; text-align:center;'>🔴 जास्त ({wt} > {target_val})</div>",
                     unsafe_allow_html=True,
                 )
         else:
             st.markdown(
-                "<div style='color: gray; padding: 5px; text-align: center; font-size: 14px;'>वजन प्रविष्ट करा</div>",
+                "<div style='color:gray; padding:5px; text-align:center;'>वजन प्रविष्ट करा</div>",
                 unsafe_allow_html=True,
             )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-if st.button("Save Entry (सर्व नोंदी सेव्ह करा)", type="primary", use_container_width=True):
-    # Filter only materials with weight > 0
-    valid_entries = {m: w for m, w in form_weights.items() if w > 0}
-    
+if st.button(
+    "Save Entry (सर्व नोंदी सेव्ह करा)", type="primary", use_container_width=True
+):
+    valid_entries = {}
+    for m, w_str in form_weights.items():
+        if w_str.strip():
+            try:
+                val = float(w_str)
+                if val > 0:
+                    valid_entries[m] = val
+            except ValueError:
+                pass
+
     if not valid_entries:
         st.warning("कृपया कमीत कमी एका मटेरियलचे वजन टाका!")
     else:
@@ -268,7 +252,6 @@ if st.button("Save Entry (सर्व नोंदी सेव्ह करा
 
         if os.path.exists(DATA_FILE):
             df_existing = pd.read_csv(DATA_FILE)
-            # Remove Heat No if present from older records structure safely
             if "Heat No" in df_existing.columns:
                 df_existing = df_existing.drop(columns=["Heat No"])
             df_combined = pd.concat([df_existing, df_new], ignore_index=True)
@@ -276,305 +259,165 @@ if st.button("Save Entry (सर्व नोंदी सेव्ह करा
             df_combined = df_new
 
         df_combined.to_csv(DATA_FILE, index=False)
+        clean_and_fix_existing_csv()
+
         st.success("✅ Furnace Entry saved successfully!")
-
         subject = f"🚨 New Furnace Entry Saved ({st.session_state['operator_name']})"
-        body = f"New Vertical Entry Saved:\n\nDate: {date_str}\nTime: {time_str}\nOperator: {st.session_state['operator_name']}"
+        body = f"New Entry Saved:\n\nDate: {date_str}\nTime: {time_str}\nOperator: {st.session_state['operator_name']}"
         send_email_notification_async(subject, body)
-
         st.rerun()
 
-# --- SIDEBAR EMAIL CONTROLS ---
-with st.sidebar:
-    st.markdown("---")
-    st.subheader("📧 Email Controls")
-    st.info("Email notifications run automatically in the background.")
-
-    st.markdown("---")
-    st.write("**Manual Monthly Email Report**")
-
-    if os.path.exists(DATA_FILE):
-        try:
-            df_mail_check = pd.read_csv(DATA_FILE)
-            if not df_mail_check.empty and "Date" in df_mail_check.columns:
-                df_mail_check = df_mail_check.dropna(subset=["Date"])
-                df_mail_check["Date_dt"] = pd.to_datetime(
-                    df_mail_check["Date"], errors="coerce"
-                )
-                df_mail_check = df_mail_check.dropna(subset=["Date_dt"])
-
-                if not df_mail_check.empty:
-                    df_mail_check["Month_Year"] = df_mail_check["Date_dt"].dt.strftime(
-                        "%B %Y"
-                    )
-                    mail_months = df_mail_check["Month_Year"].unique().tolist()
-
-                    if mail_months:
-                        selected_mail_month = st.selectbox(
-                            "Select Month for Email:", mail_months, key="sidebar_mail_month"
-                        )
-
-                        if st.button(
-                            "Get the Email", type="primary", use_container_width=True
-                        ):
-                            if selected_mail_month and str(selected_mail_month) != "nan":
-                                df_selected = df_mail_check[
-                                    df_mail_check["Month_Year"] == selected_mail_month
-                                ].copy()
-
-                                if "Heat No" in df_selected.columns:
-                                    df_selected = df_selected.drop(columns=["Heat No"])
-
-                                pivot_mail = df_selected.pivot_table(
-                                    index=["Date", "Time", "Operator"],
-                                    columns="Material",
-                                    values="Weight",
-                                    aggfunc="sum",
-                                    fill_value=0,
-                                ).reset_index()
-
-                                for m in MATERIALS:
-                                    if m not in pivot_mail.columns:
-                                        pivot_mail[m] = 0.0
-                                pivot_mail["Total Weight"] = pivot_mail[MATERIALS].sum(axis=1)
-
-                                chart_data_mail = []
-                                for m in MATERIALS:
-                                    mat_wt = (
-                                        pivot_mail[m].sum() if m in pivot_mail.columns else 0.0
-                                    )
-                                    count_entries = (
-                                        (pivot_mail[m] > 0).sum() if m in pivot_mail.columns else 1
-                                    )
-                                    if count_entries == 0:
-                                        count_entries = 1
-                                    avg_wt = mat_wt / count_entries
-                                    target_val = target_weights.get(m, 150.0)
-
-                                    if avg_wt == target_val and avg_wt > 0:
-                                        status = "🟢 अचूक (Green)"
-                                    elif avg_wt < target_val:
-                                        status = "🟡 कमी (Yellow)"
-                                    else:
-                                        status = "🔴 जास्त (Red)"
-
-                                    chart_data_mail.append({
-                                        "Material": m,
-                                        "Average Weight": avg_wt,
-                                        "Target": target_val,
-                                        "Status": status,
-                                    })
-
-                                df_chart_mail = pd.DataFrame(chart_data_mail)
-                                df_chart_mail["Status"] = pd.Categorical(
-                                    df_chart_mail["Status"],
-                                    categories=[
-                                        "🟢 अचूक (Green)",
-                                        "🟡 कमी (Yellow)",
-                                        "🔴 जास्त (Red)",
-                                    ],
-                                    ordered=True,
-                                )
-
-                                fig_mail = px.bar(
-                                    df_chart_mail,
-                                    x="Material",
-                                    y="Average Weight",
-                                    color="Status",
-                                    color_discrete_map={
-                                        "🟢 अचूक (Green)": "#28a745",
-                                        "🟡 कमी (Yellow)": "#ffc107",
-                                        "🔴 जास्त (Red)": "#dc3545",
-                                    },
-                                    title=f"Material Status Report - {selected_mail_month}",
-                                )
-
-                                try:
-                                    img_bytes = fig_mail.to_image(format="png")
-                                except Exception:
-                                    img_bytes = None
-
-                                csv_bytes = pivot_mail.to_csv(index=False).encode("utf-8")
-                                filename = f"Furnace_Report_{str(selected_mail_month).replace(' ', '_')}.csv"
-
-                                subject = f"📊 Furnace Report & Graph - {selected_mail_month}"
-                                body = f"Hello,\n\nPlease find attached the monthly furnace report for {selected_mail_month}.\n\nRegards,\nFurnace Charging System"
-
-                                send_email_notification_async(
-                                    subject,
-                                    body,
-                                    file_to_attach=csv_bytes,
-                                    filename=filename,
-                                    image_bytes=img_bytes,
-                                    img_filename=f"Furnace_Graph_{str(selected_mail_month).replace(' ', '_')}.png",
-                                )
-                                st.success(f"Email sent successfully for {selected_mail_month}!")
-        except Exception as e:
-            st.error(f"Error reading data for email: {e}")
-
 st.markdown("---")
-
-# --- 6. SAVED RECORDS & REPORT ---
-st.subheader("🗓️ Month-wise Saved Report")
+st.subheader("🗓️ Date-wise Saved Report & Quantities")
 
 if os.path.exists(DATA_FILE):
     try:
         df_all = pd.read_csv(DATA_FILE)
-        if not df_all.empty and "Date" in df_all.columns:
-            if "Heat No" in df_all.columns:
-                df_all = df_all.drop(columns=["Heat No"])
-            df_all = df_all.dropna(subset=["Date"])
-            df_all["Date_dt"] = pd.to_datetime(df_all["Date"], errors="coerce")
-            df_all = df_all.dropna(subset=["Date_dt"])
+        clean_and_fix_existing_csv()
+        df_all = pd.read_csv(DATA_FILE)
 
-            if not df_all.empty:
-                df_all["Month_Year"] = df_all["Date_dt"].dt.strftime("%B %Y")
-                all_months = df_all["Month_Year"].unique().tolist()
+        if "Heat No" in df_all.columns:
+            df_all = df_all.drop(columns=["Heat No"])
 
-                if all_months:
-                    selected_month = st.selectbox(
-                        "महिना निवडा (Select Month):", all_months
+        df_all = df_all.dropna(subset=["Date"])
+        df_all["Date_dt"] = pd.to_datetime(df_all["Date"], errors="coerce")
+        df_all = df_all.dropna(subset=["Date_dt"])
+
+        if not df_all.empty:
+            df_all["Month_Year"] = df_all["Date_dt"].dt.strftime("%B %Y")
+            all_months = df_all["Month_Year"].unique().tolist()
+
+            selected_month = st.selectbox(
+                "महिना निवडा (Select Month):", all_months
+            )
+
+            if selected_month:
+                df_filtered = df_all[df_all["Month_Year"] == selected_month].copy()
+
+                pivot_df = df_filtered.pivot_table(
+                    index=["Date", "Time", "Operator"],
+                    columns="Material",
+                    values="Weight",
+                    aggfunc="sum",
+                    fill_value=0,
+                ).reset_index()
+
+                for m in MATERIALS:
+                    if m not in pivot_df.columns:
+                        pivot_df[m] = 0.0
+
+                pivot_df["Total Weight"] = pivot_df[MATERIALS].sum(axis=1)
+
+                # --- 📅 DATE-WISE SORTING (Latest entries on top) ---
+                pivot_df = pivot_df.sort_values(by=["Date", "Time"], ascending=[False, False])
+
+                final_cols = (
+                    ["Date", "Time", "Operator"] + MATERIALS + ["Total Weight"]
+                )
+                pivot_df = pivot_df[final_cols]
+
+                st.markdown("#### 📋 Date-wise Entry & Quantity Report")
+                st.dataframe(pivot_df, use_container_width=True)
+
+                # --- 📈 GRAPHICAL ANALYTICS SECTION ---
+                st.markdown(
+                    "<h4 style='text-align: center;'>📈 Visual Analytics & Graphs</h4>",
+                    unsafe_allow_html=True,
+                )
+
+                available_dates = sorted(pivot_df["Date"].unique().tolist(), reverse=True)
+                selected_date_filter = st.selectbox(
+                    "दिनांक फिल्टर निवडा (Select Date for Graph):",
+                    ["सर्व तारखा (All Dates - Monthly View)"] + available_dates,
+                )
+
+                if (
+                    selected_date_filter
+                    != "सर्व तारखा (All Dates - Monthly View)"
+                ):
+                    df_graph_source = pivot_df[
+                        pivot_df["Date"] == selected_date_filter
+                    ]
+                else:
+                    df_graph_source = pivot_df
+
+                chart_data = []
+                for m in MATERIALS:
+                    mat_wt = (
+                        df_graph_source[m].sum()
+                        if m in df_graph_source.columns
+                        else 0.0
                     )
+                    count_entries = (
+                        (df_graph_source[m] > 0).sum()
+                        if m in df_graph_source.columns
+                        else 1
+                    )
+                    if count_entries == 0:
+                        count_entries = 1
+                    avg_wt = mat_wt / count_entries
+                    target_val = target_weights.get(m, 150.0)
 
-                    if selected_month and str(selected_month) != "nan":
-                        df_filtered = df_all[df_all["Month_Year"] == selected_month].copy()
+                    if avg_wt > target_val:
+                        status = "🔴 जास्त (Red)"
+                    elif avg_wt == target_val and avg_wt > 0:
+                        status = "🟢 अचूक (Green)"
+                    elif avg_wt < target_val and avg_wt > 0:
+                        status = "🟡 कमी (Yellow)"
+                    else:
+                        status = "🟡 कमी (Yellow)"
 
-                        if not df_filtered.empty:
-                            pivot_df = df_filtered.pivot_table(
-                                index=["Date", "Time", "Operator"],
-                                columns="Material",
-                                values="Weight",
-                                aggfunc="sum",
-                                fill_value=0,
-                            ).reset_index()
+                    chart_data.append({
+                        "Material": m,
+                        "Average Weight": avg_wt,
+                        "Target Weight": target_val,
+                        "Status": status,
+                    })
 
-                            for m in MATERIALS:
-                                if m not in pivot_df.columns:
-                                    pivot_df[m] = 0.0
+                df_chart = pd.DataFrame(chart_data)
+                df_chart["Status"] = pd.Categorical(
+                    df_chart["Status"],
+                    categories=[
+                        "🟢 अचूक (Green)",
+                        "🟡 कमी (Yellow)",
+                        "🔴 जास्त (Red)",
+                    ],
+                    ordered=True,
+                )
 
-                            pivot_df["Total Weight"] = pivot_df[MATERIALS].sum(axis=1)
+                fig = px.bar(
+                    df_chart,
+                    x="Material",
+                    y="Average Weight",
+                    color="Status",
+                    color_discrete_map={
+                        "🟢 अचूक (Green)": "#28a745",
+                        "🟡 कमी (Yellow)": "#ffc107",
+                        "🔴 जास्त (Red)": "#dc3545",
+                    },
+                    title="मटेरियलनुसार वजन स्टेटस ग्राफ (Color Status Graph)",
+                )
 
-                            display_df = pivot_df.copy()
-                            for m in MATERIALS:
-                                display_df[m] = display_df[m].apply(
-                                    lambda x: f"{x:.2f}" if float(x) > 0 else ""
-                                )
-                            display_df["Total Weight"] = display_df["Total Weight"].apply(
-                                lambda x: f"{x:.2f}"
-                            )
+                st.plotly_chart(fig, use_container_width=True)
 
-                            final_cols = (
-                                ["Date", "Time", "Operator"]
-                                + MATERIALS
-                                + ["Total Weight"]
-                            )
-                            display_df = display_df[final_cols]
+                grand_total = df_graph_source["Total Weight"].sum()
 
-                            st.markdown(
-                                "<h4 style='text-align: center;'>Saved Records Data Table</h4>",
-                                unsafe_allow_html=True,
-                            )
-                            st.dataframe(display_df, use_container_width=True)
-
-                            # --- 📈 GRAPHICAL ANALYTICS SECTION ---
-                            st.markdown(
-                                "<h4 style='text-align: center;'>📈 Visual Analytics & Graphs</h4>",
-                                unsafe_allow_html=True,
-                            )
-
-                            available_dates = pivot_df["Date"].unique().tolist()
-                            selected_date_filter = st.selectbox(
-                                "दिनांक फिल्टर निवडा (Select Date for Graph):",
-                                ["सर्व तारखा (All Dates - Monthly View)"] + available_dates,
-                            )
-
-                            if selected_date_filter != "सर्व तारखा (All Dates - Monthly View)":
-                                df_graph_source = pivot_df[pivot_df["Date"] == selected_date_filter]
-                            else:
-                                df_graph_source = pivot_df
-
-                            chart_data = []
-                            for m in MATERIALS:
-                                mat_wt = (
-                                    df_graph_source[m].sum() if m in df_graph_source.columns else 0.0
-                                )
-                                count_entries = (
-                                    (df_graph_source[m] > 0).sum() if m in df_graph_source.columns else 1
-                                )
-                                if count_entries == 0:
-                                    count_entries = 1
-                                avg_wt = mat_wt / count_entries
-                                target_val = target_weights.get(m, 150.0)
-
-                                diff = avg_wt - target_val
-
-                                if avg_wt == target_val and avg_wt > 0:
-                                    status = "🟢 अचूक (Green)"
-                                elif avg_wt < target_val:
-                                    status = "🟡 कमी (Yellow)"
-                                else:
-                                    status = "🔴 जास्त (Red)"
-
-                                if avg_wt > 0:
-                                    diff_str = f"+{diff:.1f} kg" if diff > 0 else f"{diff:.1f} kg"
-                                    text_label = f"{avg_wt:.1f}\n({diff_str})"
-                                else:
-                                    text_label = "0.0"
-
-                                chart_data.append({
-                                    "Material": m,
-                                    "Average Weight": avg_wt,
-                                    "Target Weight": target_val,
-                                    "Difference (Kg)": f"{diff:+.1f} kg",
-                                    "Status": status,
-                                    "Text_Label": text_label,
-                                })
-
-                            df_chart = pd.DataFrame(chart_data)
-                            df_chart["Status"] = pd.Categorical(
-                                df_chart["Status"],
-                                categories=[
-                                    "🟢 अचूक (Green)",
-                                    "🟡 कमी (Yellow)",
-                                    "🔴 जास्त (Red)",
-                                ],
-                                ordered=True,
-                            )
-
-                            fig = px.bar(
-                                df_chart,
-                                x="Material",
-                                y="Average Weight",
-                                color="Status",
-                                text="Text_Label",
-                                color_discrete_map={
-                                    "🟢 अचूक (Green)": "#28a745",
-                                    "🟡 कमी (Yellow)": "#ffc107",
-                                    "🔴 जास्त (Red)": "#dc3545",
-                                },
-                                title="मटेरियलनुसार वजन स्टेटस व फरक (3-Color Status Graph)",
-                            )
-
-                            fig.update_traces(texttemplate="%{text}", textposition="auto")
-                            st.plotly_chart(fig, use_container_width=True)
-
-                            grand_total = df_graph_source["Total Weight"].sum()
-
-                            col_t1, col_t2 = st.columns([2, 2])
-                            with col_t1:
-                                csv_data = df_graph_source.to_csv(index=False).encode("utf-8")
-                                st.download_button(
-                                    label="📥 Download Report (CSV)",
-                                    data=csv_data,
-                                    file_name=f"Furnace_Report_{str(selected_month).replace(' ', '_')}.csv",
-                                    mime="text/csv",
-                                )
-                            with col_t2:
-                                st.markdown(
-                                    f"<h4 style='text-align: right; color: #1E88E5;'>Grand Total: {grand_total:.2f}</h4>",
-                                    unsafe_allow_html=True,
-                                )
+                col_t1, col_t2 = st.columns([2, 2])
+                with col_t1:
+                    csv_data = df_graph_source.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        label="📥 Download Date-wise Report (CSV)",
+                        data=csv_data,
+                        file_name=(
+                            "Furnace_DateWise_Report_"
+                            f"{selected_month.replace(' ', '_')}.csv"
+                        ),
+                        mime="text/csv",
+                    )
+                with col_t2:
+                    st.markdown(
+                        f"<h4 style='text-align: right; color: #1E88E5;'>Grand Total: {grand_total:.2f} Kg</h4>",
+                        unsafe_allow_html=True,
+                    )
     except Exception as e:
         st.error(f"Error loading report: {e}")
-else:
-    st.info("अद्याप कोणतेही रेकॉर्ड सेव्ह केलेले नाही.")
