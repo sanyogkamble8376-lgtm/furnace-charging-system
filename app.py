@@ -250,7 +250,7 @@ if st.button(
 
         df_new = pd.DataFrame(new_rows)
 
-        if os.path.exists(DATA_FILE):
+        if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
             df_existing = pd.read_csv(DATA_FILE)
             if "Heat No" in df_existing.columns:
                 df_existing = df_existing.drop(columns=["Heat No"])
@@ -261,16 +261,21 @@ if st.button(
         df_combined.to_csv(DATA_FILE, index=False)
         clean_and_fix_existing_csv()
 
+        # Gather all entries for today to send in email body
+        df_today = df_combined[df_combined["Date"] == date_str]
+        today_summary_text = df_today.to_string(index=False)
+
         st.success("✅ Furnace Entry saved successfully!")
-        subject = f"🚨 New Furnace Entry Saved ({st.session_state['operator_name']})"
-        body = f"New Entry Saved:\n\nDate: {date_str}\nTime: {time_str}\nOperator: {st.session_state['operator_name']}"
+        subject = f"🚨 New Furnace Entries Saved for {date_str} ({st.session_state['operator_name']})"
+        body = f"New Entry Saved by Operator: {st.session_state['operator_name']}\nTime: {time_str}\n\n--- ALL ENTRIES FOR TODAY ({date_str}) ---\n\n{today_summary_text}"
+        
         send_email_notification_async(subject, body)
         st.rerun()
 
 st.markdown("---")
-st.subheader("🗓️ Date-wise Saved Report & Quantities")
+st.subheader("🗓️ Date-wise Saved Report & Material Analysis")
 
-if os.path.exists(DATA_FILE):
+if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
     try:
         df_all = pd.read_csv(DATA_FILE)
         clean_and_fix_existing_csv()
@@ -318,6 +323,33 @@ if os.path.exists(DATA_FILE):
 
                 st.markdown("#### 📋 Date-wise Entry & Quantity Report")
                 st.dataframe(pivot_df, use_container_width=True)
+
+                # --- 📊 MATERIAL USAGE INSIGHTS (Highest, Lowest, Equal) ---
+                st.markdown("#### 📊 Material Usage Analysis (Insights)")
+                
+                material_sums = {}
+                for m in MATERIALS:
+                    if m in pivot_df.columns:
+                        material_sums[m] = pivot_df[m].sum()
+                
+                if material_sums:
+                    max_mat = max(material_sums, key=material_sums.get)
+                    min_mat = min(material_sums, key=material_sums.get)
+                    
+                    col_ins1, col_ins2, col_ins3 = st.columns(3)
+                    with col_ins1:
+                        st.info(f"📈 **Sarvat Jast Vaporlele (Highest):**\n\n**{max_mat}** ({material_sums[max_mat]:.2f} Kg)")
+                    with col_ins2:
+                        st.warning(f"📉 **Sarvat Kami Vaporlele (Lowest):**\n\n**{min_mat}** ({material_sums[min_mat]:.2f} Kg)")
+                    with col_ins3:
+                        target_summary = []
+                        for m in MATERIALS:
+                            t_val = target_weights.get(m, 150.0)
+                            avg_v = pivot_df[m].mean() if m in pivot_df.columns else 0
+                            if abs(avg_v - t_val) < 1e-5 and avg_v > 0:
+                                target_summary.append(m)
+                        match_str = ", ".join(target_summary) if target_summary else "Konihi Nahi"
+                        st.success(f"🎯 **Target Pramane Saman/Achuk:**\n\n**{match_str}**")
 
                 # --- 📈 GRAPHICAL ANALYTICS SECTION ---
                 st.markdown(
