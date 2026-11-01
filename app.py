@@ -67,7 +67,6 @@ def _send_email_async(
         msg["To"] = RECEIVER_EMAIL
         msg["Subject"] = subject
 
-        # जर HTML सामग्री दिली असेल तर ती अटॅच करा, नाहीतर प्लेन टेक्स्ट
         if html_content:
             msg.attach(MIMEText(body_text, "plain"))
             msg.attach(MIMEText(html_content, "html"))
@@ -276,80 +275,8 @@ if st.button(
         df_combined.to_csv(DATA_FILE, index=False)
         clean_and_fix_existing_csv()
 
-        # आजच्या नोंदी एकत्र करणे ई-मेलसाठी
-        df_today = df_combined[df_combined["Date"] == date_str]
-
-        # ---- सुंदर आणि एकसारख्या फॉन्टचा HTML टेबल तयार करणे ----
-        html_body = f"""
-        <html>
-        <head>
-            <style>
-                body {{
-                    font-family: Arial, sans-serif;
-                    color: #333;
-                }}
-                table {{
-                    border-collapse: collapse;
-                    width: 100%;
-                    margin-top: 10px;
-                    font-family: 'Courier New', Courier, monospace;
-                    font-size: 13px;
-                }}
-                th, td {{
-                    border: 1px solid #c0c0c0;
-                    text-align: left;
-                    padding: 8px 12px;
-                }}
-                th {{
-                    background-color: #f2f2f2;
-                    color: #000;
-                    font-family: Arial, sans-serif;
-                    font-weight: bold;
-                }}
-                tr:nth-child(even) {{
-                    background-color: #f9f9f9;
-                }}
-            </style>
-        </head>
-        <body>
-            <p style="font-family: Arial, sans-serif; font-size: 15px;"><b>New Entry Saved by Operator:</b> {st.session_state['operator_name']}</p>
-            <p style="font-family: Arial, sans-serif; font-size: 14px;"><b>Time:</b> {time_str}</p>
-            
-            <p style="font-family: Arial, sans-serif; font-size: 14px; margin-top: 15px;"><b>--- ALL ENTRIES FOR TODAY ({date_str}) ---</b></p>
-            
-            <table>
-                <tr>
-                    <th>Operator</th>
-                    <th>Material</th>
-                    <th>Weight (Kg)</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                </tr>
-        """
-
-        for _, row in df_today.iterrows():
-            html_body += f"""
-                <tr>
-                    <td>{row['Operator']}</td>
-                    <td>{row['Material']}</td>
-                    <td>{row['Weight']}</td>
-                    <td>{row['Date']}</td>
-                    <td>{row['Time']}</td>
-                </tr>
-            """
-
-        html_body += """
-            </table>
-        </body>
-        </html>
-        """
-
-        st.success("✅ Furnace Entry saved successfully!")
-        subject = f"🚨 New Furnace Entries Saved for {date_str} ({st.session_state['operator_name']})"
-        body_plain = f"New Entry Saved by Operator: {st.session_state['operator_name']}\nTime: {time_str}"
-
-        send_email_notification_async(
-            subject, body_plain, html_content=html_body
+        st.success(
+            "✅ Furnace Entry saved successfully! (फक्त डेटा सेव्ह झाला आहे, मेल नंतर पाठवता येईल)"
         )
         st.rerun()
 
@@ -407,6 +334,85 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
 
                 st.markdown("#### 📋 Date-wise Entry & Quantity Report")
                 st.dataframe(pivot_df, use_container_width=True)
+
+                # --- 📧 Send Email Button Added Here ---
+                if st.button("📤 Send Today's Report via Email", type="secondary"):
+                    now = get_current_ist()
+                    date_str = now.strftime("%Y-%m-%d")
+                    time_str = now.strftime("%H:%M:%S")
+                    df_today = df_all[df_all["Date"] == date_str]
+
+                    html_body = f"""
+                    <html>
+                    <head>
+                        <style>
+                            body {{
+                                font-family: Arial, sans-serif;
+                                color: #333;
+                            }}
+                            table {{
+                                border-collapse: collapse;
+                                width: 100%;
+                                margin-top: 10px;
+                                font-family: 'Courier New', Courier, monospace;
+                                font-size: 13px;
+                            }}
+                            th, td {{
+                                border: 1px solid #c0c0c0;
+                                text-align: left;
+                                padding: 8px 12px;
+                            }}
+                            th {{
+                                background-color: #f2f2f2;
+                                color: #000;
+                                font-family: Arial, sans-serif;
+                                font-weight: bold;
+                            }}
+                            tr:nth-child(even) {{
+                                background-color: #f9f9f9;
+                            }}
+                        </style>
+                    </head>
+                    <body>
+                        <p style="font-family: Arial, sans-serif; font-size: 15px;"><b>Report Sent by Operator:</b> {st.session_state['operator_name']}</p>
+                        <p style="font-family: Arial, sans-serif; font-size: 14px;"><b>Time:</b> {time_str}</p>
+                        
+                        <p style="font-family: Arial, sans-serif; font-size: 14px; margin-top: 15px;"><b>--- ALL ENTRIES FOR TODAY ({date_str}) ---</b></p>
+                        
+                        <table>
+                            <tr>
+                                <th>Operator</th>
+                                <th>Material</th>
+                                <th>Weight (Kg)</th>
+                                <th>Date</th>
+                                <th>Time</th>
+                            </tr>
+                    """
+
+                    for _, row in df_today.iterrows():
+                        html_body += f"""
+                            <tr>
+                                <td>{row['Operator']}</td>
+                                <td>{row['Material']}</td>
+                                <td>{row['Weight']}</td>
+                                <td>{row['Date']}</td>
+                                <td>{row['Time']}</td>
+                            </tr>
+                        """
+
+                    html_body += """
+                        </table>
+                    </body>
+                    </html>
+                    """
+
+                    subject = f"🚨 Furnace Entries Report for {date_str} ({st.session_state['operator_name']})"
+                    body_plain = f"Report sent by Operator: {st.session_state['operator_name']}\nTime: {time_str}"
+
+                    send_email_notification_async(
+                        subject, body_plain, html_content=html_body
+                    )
+                    st.success("✅ Email sent successfully!")
 
                 st.markdown("#### 📊 Material Usage Analysis (Insights)")
 
