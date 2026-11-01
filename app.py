@@ -604,4 +604,4 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
                         unsafe_allow_html=True,
                     )
     except Exception as e:
-        st.error(f"Error loading report: {e}")s
+        st.error(f"Error loading report: {e}")
