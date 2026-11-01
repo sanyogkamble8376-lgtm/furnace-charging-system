@@ -335,89 +335,47 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
                 st.markdown("#### 📋 Date-wise Entry & Quantity Report")
                 st.dataframe(pivot_df, use_container_width=True)
 
-                # --- 📧 Custom Email Report Options (1 Divas, Date Range, Full Month) ---
-                st.markdown("#### 📧 Custom Email Report Options")
+                # --- 📧 Send Report via Email (Date Range Only) ---
+                st.markdown("#### 📧 Send Report via Email (Date Range)")
 
-                report_type = st.radio(
-                    "Mail sathi report cha prakar nivaḍa:",
-                    [
-                        "1 Divas (Specific Date)",
-                        "Date Range (Custom Days)",
-                        "Purn Mahina (Full Month)",
-                    ],
+                df_all_dates = pd.to_datetime(pivot_df["Date"]).dt.date
+                min_d = df_all_dates.min()
+                max_d = df_all_dates.max()
+
+                selected_dates = st.date_input(
+                    "Select Date Range (Start Date & End Date):",
+                    value=(min_d, max_d),
+                    min_value=min_d,
+                    max_value=max_d,
+                    key="mail_date_range_picker",
                 )
 
-                selected_mail_date = None
                 start_date, end_date = None, None
+                if isinstance(selected_dates, tuple) and len(selected_dates) == 2:
+                    start_date, end_date = selected_dates
+                elif isinstance(selected_dates, tuple) and len(selected_dates) == 1:
+                    start_date = end_date = selected_dates[0]
 
-                if report_type == "1 Divas (Specific Date)":
-                    available_mail_dates = sorted(
-                        pivot_df["Date"].unique().tolist(), reverse=True
-                    )
-                    if available_mail_dates:
-                        selected_mail_date = st.selectbox(
-                            "Tarikh nivaḍa:", available_mail_dates
-                        )
-
-                elif report_type == "Date Range (Custom Days)":
-                    st.markdown("Shuruwatichi ani Shevtachi tarikh nivaḍa:")
-                    df_all_dates = pd.to_datetime(pivot_df["Date"]).dt.date
-                    min_d = df_all_dates.min()
-                    max_d = df_all_dates.max()
-
-                    selected_dates = st.date_input(
-                        "Select Date Range:",
-                        value=(min_d, max_d),
-                        min_value=min_d,
-                        max_value=max_d,
-                        key="mail_date_range_picker",
-                    )
-                    if isinstance(selected_dates, tuple) and len(selected_dates) == 2:
-                        start_date, end_date = selected_dates
-                    elif isinstance(selected_dates, tuple) and len(selected_dates) == 1:
-                        start_date = end_date = selected_dates[0]
-
-                if st.button(
-                    "📤 Send Selected Report via Email", type="secondary"
-                ):
+                if st.button("📤 Send Report via Email", type="secondary"):
                     now = get_current_ist()
                     time_str = now.strftime("%H:%M:%S")
 
-                    if report_type == "1 Divas (Specific Date)":
-                        if selected_mail_date:
-                            df_report_data = pivot_df[
-                                pivot_df["Date"] == selected_mail_date
-                            ].copy()
-                            report_title = (
-                                f"Report for Date: {selected_mail_date}"
+                    if start_date and end_date:
+                        pivot_df["Date_obj"] = pd.to_datetime(
+                            pivot_df["Date"]
+                        ).dt.date
+                        df_report_data = pivot_df[
+                            (pivot_df["Date_obj"] >= start_date)
+                            & (pivot_df["Date_obj"] <= end_date)
+                        ].copy()
+                        if "Date_obj" in df_report_data.columns:
+                            df_report_data = df_report_data.drop(
+                                columns=["Date_obj"]
                             )
-                        else:
-                            df_report_data = pd.DataFrame()
-                            report_title = "Report"
-
-                    elif report_type == "Date Range (Custom Days)":
-                        if start_date and end_date:
-                            pivot_df["Date_obj"] = pd.to_datetime(
-                                pivot_df["Date"]
-                            ).dt.date
-                            df_report_data = pivot_df[
-                                (pivot_df["Date_obj"] >= start_date)
-                                & (pivot_df["Date_obj"] <= end_date)
-                            ].copy()
-                            if "Date_obj" in df_report_data.columns:
-                                df_report_data = df_report_data.drop(
-                                    columns=["Date_obj"]
-                                )
-                            report_title = (
-                                f"Report from {start_date} to {end_date}"
-                            )
-                        else:
-                            df_report_data = pd.DataFrame()
-                            report_title = "Report"
-
+                        report_title = f"Report from {start_date} to {end_date}"
                     else:
-                        df_report_data = pivot_df.copy()
-                        report_title = f"Full Month Report: {selected_month}"
+                        df_report_data = pd.DataFrame()
+                        report_title = "Report"
 
                     if not df_report_data.empty:
                         html_body = f"""
@@ -499,7 +457,7 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
                         )
                     else:
                         st.warning(
-                            "Nivadlelya paryayasathi kinva date range madhe konta hi data uplabdh nahi."
+                            "Nivadlelya date range madhe konta hi data uplabdh nahi."
                         )
 
                 st.markdown("#### 📊 Material Usage Analysis (Insights)")
@@ -646,4 +604,4 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
                         unsafe_allow_html=True,
                     )
     except Exception as e:
-        st.error(f"Error loading report: {e}")
+        st.error(f"Error loading report: {e}")s
