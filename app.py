@@ -58,14 +58,21 @@ def _send_email_async(
     filename=None,
     image_bytes=None,
     img_filename="furnace_graph.png",
+    html_content=None,
 ):
     try:
         clean_pwd = SENDER_PASSWORD.replace(" ", "")
-        msg = MIMEMultipart()
+        msg = MIMEMultipart("alternative")
         msg["From"] = SENDER_EMAIL
         msg["To"] = RECEIVER_EMAIL
         msg["Subject"] = subject
-        msg.attach(MIMEText(body_text, "plain"))
+
+        # जर HTML सामग्री दिली असेल तर ती अटॅच करा, नाहीतर प्लेन टेक्स्ट
+        if html_content:
+            msg.attach(MIMEText(body_text, "plain"))
+            msg.attach(MIMEText(html_content, "html"))
+        else:
+            msg.attach(MIMEText(body_text, "plain"))
 
         if file_to_attach is not None and filename is not None:
             part = MIMEApplication(file_to_attach, Name=filename)
@@ -75,7 +82,9 @@ def _send_email_async(
             df = pd.read_csv(DATA_FILE)
             today_str = get_current_ist().strftime("%Y-%m-%d")
             csv_bytes = df.to_csv(index=False).encode("utf-8")
-            part = MIMEApplication(csv_bytes, Name=f"Furnace_Report_{today_str}.csv")
+            part = MIMEApplication(
+                csv_bytes, Name=f"Furnace_Report_{today_str}.csv"
+            )
             part[
                 "Content-Disposition"
             ] = f'attachment; filename="Furnace_Report_{today_str}.csv"'
@@ -103,6 +112,7 @@ def send_email_notification_async(
     filename=None,
     image_bytes=None,
     img_filename="furnace_graph.png",
+    html_content=None,
 ):
     thread = threading.Thread(
         target=_send_email_async,
@@ -113,6 +123,7 @@ def send_email_notification_async(
             filename,
             image_bytes,
             img_filename,
+            html_content,
         ),
     )
     thread.daemon = True
@@ -142,7 +153,9 @@ if not st.session_state["operator_name"]:
 
 col_op1, col_op2 = st.columns([4, 1])
 with col_op1:
-    st.success(f"**सक्रिय ऑपरेटर (Active Operator):** {st.session_state['operator_name']}")
+    st.success(
+        f"**सक्रिय ऑपरेटर (Active Operator):** {st.session_state['operator_name']}"
+    )
 with col_op2:
     if st.button("Logout", type="primary"):
         st.session_state["operator_name"] = ""
@@ -240,13 +253,15 @@ if st.button(
 
         new_rows = []
         for mat, wt in valid_entries.items():
-            new_rows.append({
-                "Date": date_str,
-                "Time": time_str,
-                "Operator": st.session_state["operator_name"],
-                "Material": mat,
-                "Weight": wt,
-            })
+            new_rows.append(
+                {
+                    "Date": date_str,
+                    "Time": time_str,
+                    "Operator": st.session_state["operator_name"],
+                    "Material": mat,
+                    "Weight": wt,
+                }
+            )
 
         df_new = pd.DataFrame(new_rows)
 
@@ -261,15 +276,81 @@ if st.button(
         df_combined.to_csv(DATA_FILE, index=False)
         clean_and_fix_existing_csv()
 
-        # Gather all entries for today to send in email body
+        # आजच्या नोंदी एकत्र करणे ई-मेलसाठी
         df_today = df_combined[df_combined["Date"] == date_str]
-        today_summary_text = df_today.to_string(index=False)
+
+        # ---- सुंदर आणि एकसारख्या फॉन्टचा HTML टेबल तयार करणे ----
+        html_body = f"""
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    color: #333;
+                }}
+                table {{
+                    border-collapse: collapse;
+                    width: 100%;
+                    margin-top: 10px;
+                    font-family: 'Courier New', Courier, monospace;
+                    font-size: 13px;
+                }}
+                th, td {{
+                    border: 1px solid #c0c0c0;
+                    text-align: left;
+                    padding: 8px 12px;
+                }}
+                th {{
+                    background-color: #f2f2f2;
+                    color: #000;
+                    font-family: Arial, sans-serif;
+                    font-weight: bold;
+                }}
+                tr:nth-child(even) {{
+                    background-color: #f9f9f9;
+                }}
+            </style>
+        </head>
+        <body>
+            <p style="font-family: Arial, sans-serif; font-size: 15px;"><b>New Entry Saved by Operator:</b> {st.session_state['operator_name']}</p>
+            <p style="font-family: Arial, sans-serif; font-size: 14px;"><b>Time:</b> {time_str}</p>
+            
+            <p style="font-family: Arial, sans-serif; font-size: 14px; margin-top: 15px;"><b>--- ALL ENTRIES FOR TODAY ({date_str}) ---</b></p>
+            
+            <table>
+                <tr>
+                    <th>Operator</th>
+                    <th>Material</th>
+                    <th>Weight (Kg)</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                </tr>
+        """
+
+        for _, row in df_today.iterrows():
+            html_body += f"""
+                <tr>
+                    <td>{row['Operator']}</td>
+                    <td>{row['Material']}</td>
+                    <td>{row['Weight']}</td>
+                    <td>{row['Date']}</td>
+                    <td>{row['Time']}</td>
+                </tr>
+            """
+
+        html_body += """
+            </table>
+        </body>
+        </html>
+        """
 
         st.success("✅ Furnace Entry saved successfully!")
         subject = f"🚨 New Furnace Entries Saved for {date_str} ({st.session_state['operator_name']})"
-        body = f"New Entry Saved by Operator: {st.session_state['operator_name']}\nTime: {time_str}\n\n--- ALL ENTRIES FOR TODAY ({date_str}) ---\n\n{today_summary_text}"
-        
-        send_email_notification_async(subject, body)
+        body_plain = f"New Entry Saved by Operator: {st.session_state['operator_name']}\nTime: {time_str}"
+
+        send_email_notification_async(
+            subject, body_plain, html_content=html_body
+        )
         st.rerun()
 
 st.markdown("---")
@@ -297,7 +378,9 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
             )
 
             if selected_month:
-                df_filtered = df_all[df_all["Month_Year"] == selected_month].copy()
+                df_filtered = df_all[
+                    df_all["Month_Year"] == selected_month
+                ].copy()
 
                 pivot_df = df_filtered.pivot_table(
                     index=["Date", "Time", "Operator"],
@@ -313,8 +396,9 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
 
                 pivot_df["Total Weight"] = pivot_df[MATERIALS].sum(axis=1)
 
-                # --- 📅 DATE-WISE SORTING (Latest entries on top) ---
-                pivot_df = pivot_df.sort_values(by=["Date", "Time"], ascending=[False, False])
+                pivot_df = pivot_df.sort_values(
+                    by=["Date", "Time"], ascending=[False, False]
+                )
 
                 final_cols = (
                     ["Date", "Time", "Operator"] + MATERIALS + ["Total Weight"]
@@ -324,40 +408,54 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
                 st.markdown("#### 📋 Date-wise Entry & Quantity Report")
                 st.dataframe(pivot_df, use_container_width=True)
 
-                # --- 📊 MATERIAL USAGE INSIGHTS (Highest, Lowest, Equal) ---
                 st.markdown("#### 📊 Material Usage Analysis (Insights)")
-                
+
                 material_sums = {}
                 for m in MATERIALS:
                     if m in pivot_df.columns:
                         material_sums[m] = pivot_df[m].sum()
-                
+
                 if material_sums:
                     max_mat = max(material_sums, key=material_sums.get)
                     min_mat = min(material_sums, key=material_sums.get)
-                    
+
                     col_ins1, col_ins2, col_ins3 = st.columns(3)
                     with col_ins1:
-                        st.info(f"📈 **Sarvat Jast Vaporlele (Highest):**\n\n**{max_mat}** ({material_sums[max_mat]:.2f} Kg)")
+                        st.info(
+                            f"📈 **Sarvat Jast Vaporlele (Highest):**\n\n**{max_mat}** ({material_sums[max_mat]:.2f} Kg)"
+                        )
                     with col_ins2:
-                        st.warning(f"📉 **Sarvat Kami Vaporlele (Lowest):**\n\n**{min_mat}** ({material_sums[min_mat]:.2f} Kg)")
+                        st.warning(
+                            f"📉 **Sarvat Kami Vaporlele (Lowest):**\n\n**{min_mat}** ({material_sums[min_mat]:.2f} Kg)"
+                        )
                     with col_ins3:
                         target_summary = []
                         for m in MATERIALS:
                             t_val = target_weights.get(m, 150.0)
-                            avg_v = pivot_df[m].mean() if m in pivot_df.columns else 0
+                            avg_v = (
+                                pivot_df[m].mean()
+                                if m in pivot_df.columns
+                                else 0
+                            )
                             if abs(avg_v - t_val) < 1e-5 and avg_v > 0:
                                 target_summary.append(m)
-                        match_str = ", ".join(target_summary) if target_summary else "NO "
-                        st.success(f"🎯 **Target Pramane Saman/Achuk:**\n\n**{match_str}**")
+                        match_str = (
+                            ", ".join(target_summary)
+                            if target_summary
+                            else "NO "
+                        )
+                        st.success(
+                            f"🎯 **Target Pramane Saman/Achuk:**\n\n**{match_str}**"
+                        )
 
-                # --- 📈 GRAPHICAL ANALYTICS SECTION ---
                 st.markdown(
                     "<h4 style='text-align: center;'>📈 Visual Analytics & Graphs</h4>",
                     unsafe_allow_html=True,
                 )
 
-                available_dates = sorted(pivot_df["Date"].unique().tolist(), reverse=True)
+                available_dates = sorted(
+                    pivot_df["Date"].unique().tolist(), reverse=True
+                )
                 selected_date_filter = st.selectbox(
                     "दिनांक फिल्टर निवडा (Select Date for Graph):",
                     ["सर्व तारखा (All Dates - Monthly View)"] + available_dates,
@@ -436,7 +534,9 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
 
                 col_t1, col_t2 = st.columns([2, 2])
                 with col_t1:
-                    csv_data = df_graph_source.to_csv(index=False).encode("utf-8")
+                    csv_data = df_graph_source.to_csv(index=False).encode(
+                        "utf-8"
+                    )
                     st.download_button(
                         label="📥 Download Date-wise Report (CSV)",
                         data=csv_data,
