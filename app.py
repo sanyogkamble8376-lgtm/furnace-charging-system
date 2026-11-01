@@ -276,7 +276,7 @@ if st.button(
         clean_and_fix_existing_csv()
 
         st.success(
-            "✅ Furnace Entry saved successfully! (फक्त डेटा सेव्ह झाला आहे, मेल नंतर पाठवता येईल)"
+            "✅ Furnace Entry saved successfully! (नोंदी यशस्वीरित्या सेव्ह झाल्या आहेत)"
         )
         st.rerun()
 
@@ -335,84 +335,157 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
                 st.markdown("#### 📋 Date-wise Entry & Quantity Report")
                 st.dataframe(pivot_df, use_container_width=True)
 
-                # --- 📧 Send Email Button Added Here ---
-                if st.button("📤 Send Today's Report via Email", type="secondary"):
+                # --- 📧 Custom Email Report Options (1 Divas, 2 Days, 3 Days, Monthly) ---
+                st.markdown("#### 📧 Custom Email Report Options")
+
+                report_type = st.radio(
+                    "Mail sathi report cha prakar nivaḍa:",
+                    [
+                        "1 Divas (Specific Date)",
+                        "Last 2 Days",
+                        "Last 3 Days",
+                        "Purn Mahina (Full Month)",
+                    ],
+                )
+
+                selected_mail_date = None
+                if report_type == "1 Divas (Specific Date)":
+                    available_mail_dates = sorted(
+                        pivot_df["Date"].unique().tolist(), reverse=True
+                    )
+                    if available_mail_dates:
+                        selected_mail_date = st.selectbox(
+                            "Tarikh nivaḍa:", available_mail_dates
+                        )
+
+                if st.button(
+                    "📤 Send Selected Report via Email", type="secondary"
+                ):
                     now = get_current_ist()
-                    date_str = now.strftime("%Y-%m-%d")
                     time_str = now.strftime("%H:%M:%S")
-                    df_today = df_all[df_all["Date"] == date_str]
 
-                    html_body = f"""
-                    <html>
-                    <head>
-                        <style>
-                            body {{
-                                font-family: Arial, sans-serif;
-                                color: #333;
-                            }}
-                            table {{
-                                border-collapse: collapse;
-                                width: 100%;
-                                margin-top: 10px;
-                                font-family: 'Courier New', Courier, monospace;
-                                font-size: 13px;
-                            }}
-                            th, td {{
-                                border: 1px solid #c0c0c0;
-                                text-align: left;
-                                padding: 8px 12px;
-                            }}
-                            th {{
-                                background-color: #f2f2f2;
-                                color: #000;
-                                font-family: Arial, sans-serif;
-                                font-weight: bold;
-                            }}
-                            tr:nth-child(even) {{
-                                background-color: #f9f9f9;
-                            }}
-                        </style>
-                    </head>
-                    <body>
-                        <p style="font-family: Arial, sans-serif; font-size: 15px;"><b>Report Sent by Operator:</b> {st.session_state['operator_name']}</p>
-                        <p style="font-family: Arial, sans-serif; font-size: 14px;"><b>Time:</b> {time_str}</p>
-                        
-                        <p style="font-family: Arial, sans-serif; font-size: 14px; margin-top: 15px;"><b>--- ALL ENTRIES FOR TODAY ({date_str}) ---</b></p>
-                        
-                        <table>
-                            <tr>
-                                <th>Operator</th>
-                                <th>Material</th>
-                                <th>Weight (Kg)</th>
-                                <th>Date</th>
-                                <th>Time</th>
-                            </tr>
-                    """
+                    if report_type == "1 Divas (Specific Date)":
+                        if selected_mail_date:
+                            df_report_data = pivot_df[
+                                pivot_df["Date"] == selected_mail_date
+                            ].copy()
+                            report_title = (
+                                f"Report for Date: {selected_mail_date}"
+                            )
+                        else:
+                            df_report_data = pd.DataFrame()
+                            report_title = "Report"
 
-                    for _, row in df_today.iterrows():
-                        html_body += f"""
-                            <tr>
-                                <td>{row['Operator']}</td>
-                                <td>{row['Material']}</td>
-                                <td>{row['Weight']}</td>
-                                <td>{row['Date']}</td>
-                                <td>{row['Time']}</td>
-                            </tr>
+                    elif report_type == "Last 2 Days":
+                        unique_dates = sorted(
+                            pivot_df["Date"].unique().tolist(), reverse=True
+                        )
+                        last_2_dates = unique_dates[:2]
+                        df_report_data = pivot_df[
+                            pivot_df["Date"].isin(last_2_dates)
+                        ].copy()
+                        report_title = (
+                            f"Report for Last 2 Days ({', '.join(last_2_dates)})"
+                        )
+
+                    elif report_type == "Last 3 Days":
+                        unique_dates = sorted(
+                            pivot_df["Date"].unique().tolist(), reverse=True
+                        )
+                        last_3_dates = unique_dates[:3]
+                        df_report_data = pivot_df[
+                            pivot_df["Date"].isin(last_3_dates)
+                        ].copy()
+                        report_title = (
+                            f"Report for Last 3 Days ({', '.join(last_3_dates)})"
+                        )
+
+                    else:
+                        df_report_data = pivot_df.copy()
+                        report_title = f"Full Month Report: {selected_month}"
+
+                    if not df_report_data.empty:
+                        html_body = f"""
+                        <html>
+                        <head>
+                            <style>
+                                body {{
+                                    font-family: Arial, sans-serif;
+                                    color: #333;
+                                }}
+                                table {{
+                                    border-collapse: collapse;
+                                    width: 100%;
+                                    margin-top: 10px;
+                                    font-family: 'Courier New', Courier, monospace;
+                                    font-size: 13px;
+                                }}
+                                th, td {{
+                                    border: 1px solid #c0c0c0;
+                                    text-align: left;
+                                    padding: 8px 12px;
+                                }}
+                                th {{
+                                    background-color: #f2f2f2;
+                                    color: #000;
+                                    font-family: Arial, sans-serif;
+                                    font-weight: bold;
+                                }}
+                                tr:nth-child(even) {{
+                                    background-color: #f9f9f9;
+                                }}
+                            </style>
+                        </head>
+                        <body>
+                            <p style="font-family: Arial, sans-serif; font-size: 15px;"><b>Report Sent by Operator:</b> {st.session_state['operator_name']}</p>
+                            <p style="font-family: Arial, sans-serif; font-size: 14px;"><b>Type:</b> {report_title}</p>
+                            <p style="font-family: Arial, sans-serif; font-size: 14px;"><b>Time:</b> {time_str}</p>
+                            
+                            <p style="font-family: Arial, sans-serif; font-size: 14px; margin-top: 15px;"><b>--- {report_title.upper()} ---</b></p>
+                            
+                            <table>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Time</th>
+                                    <th>Operator</th>
                         """
 
-                    html_body += """
-                        </table>
-                    </body>
-                    </html>
-                    """
+                        for m in MATERIALS:
+                            html_body += f"<th>{m} (Kg)</th>"
+                        html_body += "<th>Total Weight (Kg)</th></tr>"
 
-                    subject = f"🚨 Furnace Entries Report for {date_str} ({st.session_state['operator_name']})"
-                    body_plain = f"Report sent by Operator: {st.session_state['operator_name']}\nTime: {time_str}"
+                        for _, row in df_report_data.iterrows():
+                            html_body += f"""
+                                <tr>
+                                    <td>{row['Date']}</td>
+                                    <td>{row['Time']}</td>
+                                    <td>{row['Operator']}</td>
+                            """
+                            for m in MATERIALS:
+                                html_body += f"<td>{row.get(m, 0.0)}</td>"
+                            html_body += (
+                                f"<td><b>{row['Total Weight']}</b></td></tr>"
+                            )
 
-                    send_email_notification_async(
-                        subject, body_plain, html_content=html_body
-                    )
-                    st.success("✅ Email sent successfully!")
+                        html_body += """
+                            </table>
+                        </body>
+                        </html>
+                        """
+
+                        subject = f"🚨 Furnace {report_title} ({st.session_state['operator_name']})"
+                        body_plain = f"Report sent by Operator: {st.session_state['operator_name']} - {report_title}\nTime: {time_str}"
+
+                        send_email_notification_async(
+                            subject, body_plain, html_content=html_body
+                        )
+                        st.success(
+                            f"✅ {report_title} email sent successfully!"
+                        )
+                    else:
+                        st.warning(
+                            "Nivadlelya paryayasathi konta hi data uplabdh nahi."
+                        )
 
                 st.markdown("#### 📊 Material Usage Analysis (Insights)")
 
