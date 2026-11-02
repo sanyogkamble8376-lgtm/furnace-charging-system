@@ -156,13 +156,13 @@ with st.sidebar:
     st.subheader("🎯 Material Target Weights")
     default_targets = {
         "MS": 150.0,
-        "CRC": 150.0,
+        "CRC": 100.0,
         "CI": 150.0,
-        "PIG": 150.0,
+        "PIG": 100.0,
         "SG BORING": 150.0,
-        "CI BORING": 150.0,
+        "CI BORING": 100.0,
         "SOLED": 150.0,
-        "R.R": 150.0,
+        "R.R": 50.0,
     }
     target_weights = {}
     for mat in MATERIALS:
