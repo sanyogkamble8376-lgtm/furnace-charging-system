@@ -73,20 +73,10 @@ def _send_email_async(
         else:
             msg.attach(MIMEText(body_text, "plain"))
 
+        # ✅ FIXED: Fakt dileli specific filtered file attach hoil (juni default file nahi)
         if file_to_attach is not None and filename is not None:
             part = MIMEApplication(file_to_attach, Name=filename)
             part["Content-Disposition"] = f'attachment; filename="{filename}"'
-            msg.attach(part)
-        elif os.path.exists(DATA_FILE):
-            df = pd.read_csv(DATA_FILE)
-            today_str = get_current_ist().strftime("%Y-%m-%d")
-            csv_bytes = df.to_csv(index=False).encode("utf-8")
-            part = MIMEApplication(
-                csv_bytes, Name=f"Furnace_Report_{today_str}.csv"
-            )
-            part[
-                "Content-Disposition"
-            ] = f'attachment; filename="Furnace_Report_{today_str}.csv"'
             msg.attach(part)
 
         if image_bytes is not None:
@@ -342,11 +332,10 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
                 min_d = df_all_dates.min()
                 max_d = df_all_dates.max()
 
+                # ✅ FIXED: min_value ani max_value काढले आहेत, ज्यामुळे युजर कोणतीही तारीख (उदा. आजची किंवा नोव्हेंबरची) सहजरीत्या निवडू शकेल.
                 selected_dates = st.date_input(
                     "Select Date Range (Start Date & End Date):",
                     value=(min_d, max_d),
-                    min_value=min_d,
-                    max_value=max_d,
                     key="mail_date_range_picker",
                 )
 
@@ -378,6 +367,10 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
                         report_title = "Report"
 
                     if not df_report_data.empty:
+                        # ✅ FIXED: फक्त निवडलेल्या date range चा डेटा CSV bytes मध्ये convert केला
+                        csv_attachment_bytes = df_report_data.to_csv(index=False).encode("utf-8")
+                        csv_filename = f"Furnace_Report_{start_date}_to_{end_date}.csv"
+
                         html_body = f"""
                         <html>
                         <head>
@@ -447,17 +440,22 @@ if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
                         """
 
                         subject = f"🚨 Furnace {report_title} ({st.session_state['operator_name']})"
-                        body_plain = f"Report sent by Operator: {st.session_state['operator_name']} - {report_title}\nTime: {time_str}"
+                        body_plain = f"Report sent by Operator: {st.session_state['operator_name']}\n{report_title}\nTime: {time_str}"
 
+                        # ✅ FIXED: इथे filtered CSV bytes आणि filename पाठवले आहेत
                         send_email_notification_async(
-                            subject, body_plain, html_content=html_body
+                            subject, 
+                            body_plain, 
+                            file_to_attach=csv_attachment_bytes, 
+                            filename=csv_filename, 
+                            html_content=html_body
                         )
                         st.success(
                             f"✅ {report_title} email sent successfully!"
                         )
                     else:
                         st.warning(
-                            "Nivadlelya date range madhe konta hi data uplabdh nahi."
+                            "निवडलेlya date range madhe konta hi data uplabdh nahi."
                         )
 
                 st.markdown("#### 📊 Material Usage Analysis (Insights)")
